@@ -7,6 +7,12 @@
 </head>
 <body>
 
+<div class="update-bar" id="updateBar" role="status" hidden>
+  <span>Nueva versión <span id="updateVer"></span> disponible</span>
+  <span id="updateErr" hidden></span>
+  <button class="btn link" id="updateInstall">Actualizar</button>
+</div>
+
 <nav class="tabs" role="tablist">
   <button class="tab" role="tab" data-tab="timer" id="tab-timer">Temporizador</button>
   <button class="tab" role="tab" data-tab="metro" id="tab-metro">Metrónomo</button>
