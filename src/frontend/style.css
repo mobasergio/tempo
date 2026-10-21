@@ -81,8 +81,14 @@ button:disabled { cursor: default; }
   flex-direction: column;
   align-items: center;
   padding: var(--s5) var(--s5) var(--s4);
+  /* en ventana maximizada / pantalla completa el contenido no se estira */
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
 }
 .panel[hidden] { display: none; }
+.panel.metro, .panel.todo { max-height: 760px; }
+.panel.todo { max-width: 640px; }
 
 /* ───────────────────────── Botones ───────────────────────── */
 .btn {

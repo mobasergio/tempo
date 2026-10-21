@@ -6,6 +6,7 @@
 
 const LOOKAHEAD_MS = 25;        // cada cuánto despierta el planificador
 const SCHEDULE_AHEAD = 0.1;     // segundos de audio programados por adelantado
+const MAX_GAIN = 2.5;           // ganancia con el volumen al 100 %; el limitador evita que recorte
 
 // La página se sirve por file://, desde donde Chromium no deja cargar un
 // worker por URL: se crea desde un Blob con el código inline.
@@ -48,8 +49,21 @@ class Metronome {
     if (!this.ctx) {
       this.ctx = new AudioContext({ latencyHint: 'interactive' });
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.volume;
-      this.master.connect(this.ctx.destination);
+      this.master.gain.value = this.volume * MAX_GAIN;
+      // Limitador: deja subir la ganancia muy por encima de 1 sin distorsionar.
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = -3;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.001;
+      limiter.release.value = 0.05;
+      this.master.connect(limiter).connect(this.ctx.destination);
+
+      // Ruido blanco para el transitorio de ataque de cada clic (se crea una vez).
+      const len = Math.ceil(this.ctx.sampleRate * 0.01);
+      this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const data = this.noise.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
@@ -65,7 +79,7 @@ class Metronome {
 
   setVolume(v) {
     this.volume = v;
-    if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.01);
+    if (this.master) this.master.gain.setTargetAtTime(v * MAX_GAIN, this.ctx.currentTime, 0.01);
   }
 
   start() {
@@ -112,17 +126,31 @@ class Metronome {
     const accented = this.accents.has(beat);
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();
-    osc.type = accented ? 'square' : 'sine';
-    osc.frequency.value = accented ? 1760 : 880;
+    // triangle en vez de sine: más armónicos, se oye por encima del instrumento
+    osc.type = accented ? 'square' : 'triangle';
+    osc.frequency.value = accented ? 1760 : 1000;
 
-    const peak = accented ? 0.6 : 0.45;
+    const peak = accented ? 1 : 0.85;
     env.gain.setValueAtTime(0, time);
     env.gain.linearRampToValueAtTime(peak, time + 0.001);
-    env.gain.exponentialRampToValueAtTime(0.001, time + (accented ? 0.05 : 0.035));
+    env.gain.exponentialRampToValueAtTime(0.001, time + (accented ? 0.08 : 0.06));
 
     osc.connect(env).connect(this.master);
     osc.start(time);
-    osc.stop(time + 0.06);
+    osc.stop(time + 0.1);
+
+    // transitorio: ráfaga corta de ruido agudo, el "tic" de madera del ataque
+    const tick = this.ctx.createBufferSource();
+    tick.buffer = this.noise;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 3000;
+    const tickEnv = this.ctx.createGain();
+    tickEnv.gain.setValueAtTime(accented ? 0.9 : 0.7, time);
+    tickEnv.gain.exponentialRampToValueAtTime(0.001, time + 0.008);
+    tick.connect(hp).connect(tickEnv).connect(this.master);
+    tick.start(time);
+    tick.stop(time + 0.01);
 
     this.queue.push({ beat, time });
     if (this.queue.length > 32) this.queue.shift();   // ventana oculta: rAF no consume
