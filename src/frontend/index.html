@@ -13,80 +13,88 @@
 </nav>
 
 <!-- ───────── Temporizador ───────── -->
-<section class="panel" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
-  <div class="done-banner" id="doneBanner" hidden>¡Tiempo terminado!</div>
-
-  <div class="big" id="timerDisplay">25:00</div>
-  <div class="bar"><div class="bar-fill" id="timerBar"></div></div>
-  <div class="status" id="timerStatus">Listo</div>
-
-  <div class="row quick">
-    <button class="chip" data-min="5">5 min</button>
-    <button class="chip" data-min="15">15 min</button>
-    <button class="chip" data-min="25">25 min</button>
-    <button class="chip" data-min="45">45 min</button>
+<section class="panel timer" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
+  <div class="ring" id="ring">
+    <svg viewBox="0 0 240 240" aria-hidden="true">
+      <circle class="ring-track" cx="120" cy="120" r="110"></circle>
+      <circle class="ring-fill" id="ringFill" cx="120" cy="120" r="110"></circle>
+    </svg>
+    <div class="ring-center">
+      <label class="time time-edit" id="timeEdit" title="Haz clic para cambiar la duración">
+        <input type="text" inputmode="numeric" id="customMin" maxlength="4" value="25" aria-label="Minutos">
+        <span>:</span>
+        <input type="text" inputmode="numeric" id="customSec" maxlength="2" value="00" aria-label="Segundos">
+      </label>
+      <div class="time" id="timerDisplay" hidden>25:00</div>
+      <div class="status" id="timerStatus" role="status">Listo</div>
+    </div>
   </div>
 
-  <div class="row custom">
-    <label>Min <input type="number" id="customMin" min="0" max="1440" value="25"></label>
-    <label>Seg <input type="number" id="customSec" min="0" max="59" value="0"></label>
+  <div class="group">
+    <div class="eyebrow">Duración</div>
+    <div class="duration-row">
+      <div class="seg" id="presets">
+        <button data-min="5">5</button>
+        <button data-min="15">15</button>
+        <button data-min="25">25</button>
+        <button data-min="45">45</button>
+      </div>
+      <span class="unit">min</span>
+    </div>
   </div>
 
-  <div class="row controls">
-    <button class="primary" id="timerStart">Iniciar</button>
-    <button id="timerPause" disabled>Pausar</button>
-    <button id="timerReset">Reiniciar</button>
+  <div class="actions">
+    <button class="btn primary" id="timerMain">Iniciar</button>
+    <button class="btn link" id="timerReset">Reiniciar</button>
   </div>
 
-  <p class="hint">Espacio: iniciar / pausar</p>
+  <p class="hint"><kbd>Espacio</kbd> iniciar / pausar</p>
 </section>
 
 <!-- ───────── Metrónomo ───────── -->
-<section class="panel" id="panel-metro" role="tabpanel" aria-labelledby="tab-metro" hidden>
-  <div class="bpm-wrap">
-    <div class="big" id="bpmDisplay">100</div>
-    <div class="bpm-unit">BPM<span id="bpmNote"></span></div>
+<section class="panel metro" id="panel-metro" role="tabpanel" aria-labelledby="tab-metro" hidden>
+  <!-- Escala de metrónomo analógico: lento arriba, rápido abajo; la pesa marca el tempo -->
+  <div class="scale" id="scale" role="slider" tabindex="0" aria-label="Tempo"
+       aria-valuemin="30" aria-valuemax="240" aria-valuenow="100">
+    <div class="rail" id="rail">
+      <div class="weight" id="weight"></div>
+    </div>
   </div>
 
-  <div class="dots" id="dots"></div>
+  <div class="metro-side">
+    <div class="hero">
+      <div class="bpm"><span id="bpmDisplay">100</span><small>BPM</small></div>
+      <div class="tempo-name" id="tempoName">Andante</div>
+      <div class="bpm-note" id="bpmNote"></div>
+    </div>
 
-  <input type="range" id="bpmRange" min="30" max="240" value="100" aria-label="Tempo">
+    <!-- compás (fracción con ‹ ›) y pulsos: clic en un pulso lo acentúa -->
+    <div class="beat-row">
+      <div class="meter" id="meter" role="spinbutton" tabindex="0" aria-label="Compás" title="Compás">
+        <button class="meter-arrow" id="meterPrev" tabindex="-1" aria-label="Compás anterior">‹</button>
+        <span class="frac"><span id="meterNum">4</span><span id="meterDen">4</span></span>
+        <button class="meter-arrow" id="meterNext" tabindex="-1" aria-label="Compás siguiente">›</button>
+      </div>
+      <div class="dots" id="dots" title="Clic en un pulso para acentuarlo"></div>
+    </div>
 
-  <div class="row steps">
-    <button data-step="-5">−5</button>
-    <button data-step="-1">−1</button>
-    <input type="number" id="bpmInput" min="30" max="240" value="100" aria-label="BPM">
-    <button data-step="1">+1</button>
-    <button data-step="5">+5</button>
+    <div class="volume" id="volume">
+      <button class="vol-icon" id="volMute" aria-label="Silenciar">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path class="spk" d="M4 9h4l5-4v14l-5-4H4z"></path>
+          <path class="wave w1" d="M16 9.5a3.5 3.5 0 0 1 0 5"></path>
+          <path class="wave w2" d="M18.5 7a7 7 0 0 1 0 10"></path>
+          <path class="mute" d="M16.5 9.5l5 5m0-5l-5 5"></path>
+        </svg>
+      </button>
+      <input type="range" class="slider" id="volRange" min="0" max="100" value="80" aria-label="Volumen">
+    </div>
+
+    <button class="btn primary block" id="metroToggle">Iniciar</button>
+
+    <p class="notice" id="metroNotice" hidden>Se detuvo al ocultar la ventana.</p>
+    <p class="hint"><kbd>Espacio</kbd> iniciar / parar · <kbd>↑</kbd><kbd>↓</kbd> ±1</p>
   </div>
-
-  <div class="row">
-    <button id="tapBtn" class="wide">Tap tempo</button>
-  </div>
-
-  <div class="row options">
-    <label>Compás
-      <select id="meterSel">
-        <option value="2/4">2/4</option>
-        <option value="3/4">3/4</option>
-        <option value="4/4">4/4</option>
-        <option value="6/8">6/8</option>
-      </select>
-    </label>
-    <label class="check"><input type="checkbox" id="accentChk" checked> Acentuar 1.º tiempo</label>
-  </div>
-
-  <div class="row volume">
-    <label for="volRange">Volumen</label>
-    <input type="range" id="volRange" min="0" max="100" value="80">
-  </div>
-
-  <div class="row controls">
-    <button class="primary wide" id="metroToggle">Iniciar</button>
-  </div>
-
-  <p class="notice" id="metroNotice" hidden>Metrónomo detenido al ocultar la ventana.</p>
-  <p class="hint">Espacio: iniciar / parar · ↑ ↓: ±1 BPM</p>
 </section>
 
 <script src="metronome.js"></script>

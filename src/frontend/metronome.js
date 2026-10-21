@@ -24,7 +24,7 @@ class Metronome {
   constructor({ onBeat } = {}) {
     this.bpm = 100;
     this.beatsPerBar = 4;
-    this.accent = true;
+    this.accents = new Set([0]);   // índices de los pulsos acentuados
     this.volume = 0.8;
     this.onBeat = onBeat || (() => {});
 
@@ -61,7 +61,7 @@ class Metronome {
     this.beat = 0;
   }
 
-  setAccent(on) { this.accent = on; }
+  setAccents(list) { this.accents = new Set(list); }
 
   setVolume(v) {
     this.volume = v;
@@ -109,7 +109,7 @@ class Metronome {
   }
 
   scheduleClick(beat, time) {
-    const accented = this.accent && beat === 0;
+    const accented = this.accents.has(beat);
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();
     osc.type = accented ? 'square' : 'sine';
@@ -137,25 +137,5 @@ class Metronome {
     while (this.queue.length && this.queue[0].time <= now) current = this.queue.shift();
     if (current) this.onBeat(current.beat);
     this.raf = requestAnimationFrame(() => this.draw());
-  }
-}
-
-// Tap tempo: media de los intervalos entre los últimos toques.
-class TapTempo {
-  constructor({ maxTaps = 5, resetAfterMs = 2000 } = {}) {
-    this.maxTaps = maxTaps;
-    this.resetAfterMs = resetAfterMs;
-    this.taps = [];
-  }
-
-  // Devuelve el BPM calculado, o null si aún no hay suficientes toques.
-  tap(now = performance.now()) {
-    const last = this.taps[this.taps.length - 1];
-    if (last !== undefined && now - last > this.resetAfterMs) this.taps = [];
-    this.taps.push(now);
-    if (this.taps.length > this.maxTaps) this.taps.shift();
-    if (this.taps.length < 2) return null;
-    const avg = (this.taps[this.taps.length - 1] - this.taps[0]) / (this.taps.length - 1);
-    return 60000 / avg;
   }
 }
