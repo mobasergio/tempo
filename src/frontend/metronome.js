@@ -96,7 +96,11 @@ class Metronome {
 
   scheduler() {
     if (!this.running) return;
-    const horizon = this.ctx.currentTime + SCHEDULE_AHEAD;
+    const now = this.ctx.currentTime;
+    // Si la página estuvo congelada, no recuperar los pulsos perdidos de golpe:
+    // se retoma el compás desde ahora.
+    if (this.nextNoteTime < now - 0.05) this.nextNoteTime = now + 0.05;
+    const horizon = now + SCHEDULE_AHEAD;
     while (this.nextNoteTime < horizon) {
       this.scheduleClick(this.beat, this.nextNoteTime);
       this.nextNoteTime += 60 / this.bpm;

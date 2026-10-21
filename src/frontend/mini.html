@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tempo mini</title>
+<style>
+  :root {
+    --bg: #121417;
+    --card: #1c1f24;
+    --border: #33383f;
+    --text: #e8eaed;
+    --muted: #6b727c;
+    --warn: #ffb74d;
+    --danger: #ef5350;
+    color-scheme: dark;
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);   /* opaca: en Windows las secundarias no son transparentes */
+    user-select: none;
+    cursor: move;
+  }
+  body { padding: 3px; box-sizing: border-box; }
+  .card {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-sizing: border-box;
+  }
+  #t {
+    font: 300 38px/1 "Segoe UI", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -1px;
+    color: var(--text);
+  }
+  #t.idle { color: var(--muted); }
+  #t.paused { opacity: .55; }
+  #t.warn { color: var(--warn); }
+  #t.done { color: var(--danger); }
+  #t.blink { animation: blink .5s steps(1) 8; }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body data-tiny-drag>
+  <div class="card"><div id="t">--:--</div></div>
+<script src="format.js"></script>
+<script src="mini.js"></script>
+</body>
+</html>

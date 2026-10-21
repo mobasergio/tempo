@@ -174,7 +174,27 @@ function setVolume(v) {
 function toggleMetro() {
   const running = metro.toggle();
   $('metroToggle').textContent = running ? 'Parar' : 'Iniciar';
+  if (running) $('metroNotice').hidden = true;
+  tiny.api.call('metroState', { running });
 }
+
+// Con la ventana oculta WebView2 congela la página (y el planificador del
+// metrónomo): se para y se avisa. El backend envía 'metro-stop' antes de
+// ocultar; visibilitychange cubre el resto de casos.
+function stopMetroForHide() {
+  if (!metro.running) return;
+  toggleMetro();
+  $('metroNotice').hidden = false;
+}
+tiny.api.on('metro-stop', stopMetroForHide);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopMetroForHide();
+});
+
+// Elementos del menú de la bandeja que atiende la página (el resto, el backend).
+tiny.tray.on((id) => {
+  if (id === 'metro') toggleMetro();
+});
 
 $('bpmRange').addEventListener('input', (e) => setBpm(e.target.value));
 $('bpmInput').addEventListener('change', (e) => setBpm(e.target.value));

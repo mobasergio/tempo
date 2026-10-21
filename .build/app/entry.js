@@ -2,7 +2,7 @@ import { createApp } from './bridge.js';
 import * as appMod from './src/main.js';
 
 const FRONTEND = "D:\\work\\tempo/src/frontend";
-const RESOURCES = null;
+const RESOURCES = "D:\\work\\tempo\\resources";
 const EXECUTABLES = null;
 
 const app = await createApp({
