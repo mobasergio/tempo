@@ -10,6 +10,7 @@
 <nav class="tabs" role="tablist">
   <button class="tab" role="tab" data-tab="timer" id="tab-timer">Temporizador</button>
   <button class="tab" role="tab" data-tab="metro" id="tab-metro">Metrónomo</button>
+  <button class="tab" role="tab" data-tab="todo" id="tab-todo">Tareas</button>
 </nav>
 
 <!-- ───────── Temporizador ───────── -->
@@ -95,6 +96,24 @@
     <p class="notice" id="metroNotice" hidden>Se detuvo al ocultar la ventana.</p>
     <p class="hint"><kbd>Espacio</kbd> iniciar / parar · <kbd>↑</kbd><kbd>↓</kbd> ±1</p>
   </div>
+</section>
+
+<!-- ───────── Tareas ───────── -->
+<section class="panel todo" id="panel-todo" role="tabpanel" aria-labelledby="tab-todo" hidden>
+  <form class="todo-form" id="todoForm" autocomplete="off">
+    <input type="text" class="field" id="todoInput" placeholder="Nueva tarea…" maxlength="200" aria-label="Nueva tarea">
+    <button class="btn primary" type="submit">Añadir</button>
+  </form>
+
+  <ul class="todo-list" id="todoList" aria-label="Tareas"></ul>
+  <p class="todo-empty" id="todoEmpty">No hay tareas</p>
+
+  <div class="todo-foot">
+    <span id="todoCount"></span>
+    <button class="btn link" id="todoClear">Borrar completadas</button>
+  </div>
+
+  <p class="hint"><kbd>Intro</kbd> añadir · doble clic para editar · arrastra <span class="grip-glyph">⋮⋮</span> para ordenar</p>
 </section>
 
 <script src="metronome.js"></script>

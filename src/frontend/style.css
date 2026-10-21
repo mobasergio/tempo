@@ -427,3 +427,129 @@ kbd {
 .slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--cyan-tint), 0 0 0 1px var(--cyan-500); }
 
 .metro-side .hint { margin-top: auto; }
+
+/* ────────────────────────── Tareas ────────────────────────── */
+.panel.todo { align-items: stretch; gap: var(--s4); }
+
+.field {
+  min-width: 0;
+  padding: 10px var(--s3);
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--gray-900);
+  color: var(--gray-100);
+  font: inherit;
+  transition: background .15s;
+}
+.field::placeholder { color: var(--gray-500); }
+.field:hover { background: var(--gray-850); }
+.field:focus { outline: none; background: var(--gray-800); box-shadow: var(--raise); }
+
+.todo-form { display: flex; gap: var(--s2); }
+.todo-form .field { flex: 1; }
+
+.todo-list {
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--s2));
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.todo-list::-webkit-scrollbar { width: 8px; }
+.todo-list::-webkit-scrollbar-thumb { border-radius: 4px; background: var(--gray-800); }
+.todo-list::-webkit-scrollbar-thumb:hover { background: var(--gray-700); }
+.todo-list:empty { display: none; }
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 40px;
+  padding: var(--s1) var(--s2);
+  border-radius: var(--r-md);
+  transition: background .12s;
+}
+.todo-item:hover { background: var(--gray-900); }
+/* arrastre: las demás tareas se deslizan; la arrastrada sigue al ratón y se asienta al soltar */
+.todo-list.sorting .todo-item { transition: background .12s, transform .18s ease; }
+.todo-list.sorting .todo-item.dragging {
+  position: relative;
+  z-index: 1;
+  background: var(--gray-800);
+  box-shadow: var(--raise), 0 4px 12px rgb(0 0 0 / .4);
+  transition: none;
+}
+.todo-list.sorting .todo-item.dragging.settling { transition: transform .15s ease; }
+.todo-list.sorting, .todo-list.sorting * { cursor: grabbing; }
+@media (prefers-reduced-motion: reduce) {
+  .todo-list.sorting .todo-item, .todo-list.sorting .todo-item.dragging.settling { transition: none; }
+}
+
+.todo-grip {
+  flex: none;
+  width: 14px;
+  color: var(--gray-600);
+  font-size: 12px;
+  letter-spacing: -3px;
+  text-align: center;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity .12s, color .12s;
+}
+.todo-item:hover .todo-grip, .todo-item.dragging .todo-grip { opacity: 1; }
+.todo-grip:hover { color: var(--gray-300); }
+.todo-item.dragging .todo-grip { cursor: grabbing; color: var(--gray-300); }
+.grip-glyph { letter-spacing: -3px; padding-right: 3px; }
+
+.todo-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px; height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--gray-600);
+  transition: background .12s, box-shadow .12s;
+}
+.todo-check:hover { box-shadow: inset 0 0 0 1.5px var(--cyan-500); }
+.todo-check[aria-pressed="true"] { background: var(--cyan-500); box-shadow: none; }
+.todo-check[aria-pressed="true"]::after {   /* ✓ */
+  content: '';
+  width: 5px; height: 9px;
+  margin-top: -2px;
+  border: solid var(--cyan-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.todo-text { flex: 1; min-width: 0; overflow-wrap: anywhere; cursor: text; transition: color .12s; }
+.todo-item.done .todo-text { color: var(--gray-500); text-decoration: line-through; }
+.todo-edit { flex: 1; padding: 4px var(--s2); margin: -4px 0; }
+
+.todo-del {
+  flex: none;
+  width: 24px; height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--gray-500);
+  font-size: 18px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity .12s, color .12s, background .12s;
+}
+.todo-item:hover .todo-del, .todo-del:focus-visible { opacity: 1; }
+.todo-del:hover { color: var(--red-300); background: var(--red-tint); }
+
+.todo-empty { margin: auto 0; color: var(--gray-500); text-align: center; }
+.todo-empty[hidden] { display: none; }
+
+.todo-foot { display: flex; align-items: center; justify-content: space-between; min-height: 32px; color: var(--gray-500); font-size: 12px; }
+.todo-foot .btn.link { padding: 6px var(--s2); font-size: 13px; }
+.todo-foot .btn.link:disabled { visibility: hidden; }
+.panel.todo .hint { margin-top: 0; }

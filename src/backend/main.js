@@ -142,7 +142,7 @@ async function pollWindow() {
   if (st.visible && st.minimized) return hideWindow();   // por si onWindowState no llegó
   if (st.visible === tray.visible) return;
   tray.visible = st.visible;
-  if (!visible) stopMetroForHide();
+  if (!st.visible) stopMetroForHide();
   updateTray();
 }
 

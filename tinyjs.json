@@ -3,7 +3,7 @@
   "name": "tempo",
   "title": "Tempo",
   "size": "480x600",
-  "id": "com.example.tempo",
-  "version": "0.1.0",
+  "id": "com.mobasergio.tempo",
+  "version": "1.0.0",
   "minTinyjsVersion": "0.61.0"
 }
