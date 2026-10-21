@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tempo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" data-tab="timer" id="tab-timer">Temporizador</button>
+  <button class="tab" role="tab" data-tab="metro" id="tab-metro">Metrónomo</button>
+</nav>
+
+<!-- ───────── Temporizador ───────── -->
+<section class="panel" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
+  <div class="done-banner" id="doneBanner" hidden>¡Tiempo terminado!</div>
+
+  <div class="big" id="timerDisplay">25:00</div>
+  <div class="bar"><div class="bar-fill" id="timerBar"></div></div>
+  <div class="status" id="timerStatus">Listo</div>
+
+  <div class="row quick">
+    <button class="chip" data-min="5">5 min</button>
+    <button class="chip" data-min="15">15 min</button>
+    <button class="chip" data-min="25">25 min</button>
+    <button class="chip" data-min="45">45 min</button>
+  </div>
+
+  <div class="row custom">
+    <label>Min <input type="number" id="customMin" min="0" max="1440" value="25"></label>
+    <label>Seg <input type="number" id="customSec" min="0" max="59" value="0"></label>
+  </div>
+
+  <div class="row controls">
+    <button class="primary" id="timerStart">Iniciar</button>
+    <button id="timerPause" disabled>Pausar</button>
+    <button id="timerReset">Reiniciar</button>
+  </div>
+
+  <p class="hint">Espacio: iniciar / pausar</p>
+</section>
+
+<!-- ───────── Metrónomo ───────── -->
+<section class="panel" id="panel-metro" role="tabpanel" aria-labelledby="tab-metro" hidden>
+  <div class="bpm-wrap">
+    <div class="big" id="bpmDisplay">100</div>
+    <div class="bpm-unit">BPM<span id="bpmNote"></span></div>
+  </div>
+
+  <div class="dots" id="dots"></div>
+
+  <input type="range" id="bpmRange" min="30" max="240" value="100" aria-label="Tempo">
+
+  <div class="row steps">
+    <button data-step="-5">−5</button>
+    <button data-step="-1">−1</button>
+    <input type="number" id="bpmInput" min="30" max="240" value="100" aria-label="BPM">
+    <button data-step="1">+1</button>
+    <button data-step="5">+5</button>
+  </div>
+
+  <div class="row">
+    <button id="tapBtn" class="wide">Tap tempo</button>
+  </div>
+
+  <div class="row options">
+    <label>Compás
+      <select id="meterSel">
+        <option value="2/4">2/4</option>
+        <option value="3/4">3/4</option>
+        <option value="4/4">4/4</option>
+        <option value="6/8">6/8</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="accentChk" checked> Acentuar 1.º tiempo</label>
+  </div>
+
+  <div class="row volume">
+    <label for="volRange">Volumen</label>
+    <input type="range" id="volRange" min="0" max="100" value="80">
+  </div>
+
+  <div class="row controls">
+    <button class="primary wide" id="metroToggle">Iniciar</button>
+  </div>
+
+  <p class="hint">Espacio: iniciar / parar · ↑ ↓: ±1 BPM</p>
+</section>
+
+<script src="metronome.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
