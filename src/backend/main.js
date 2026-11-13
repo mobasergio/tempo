@@ -61,6 +61,187 @@ function publish() {
 
 const tray = { icon: '', tooltip: null, labels: {}, visible: true, metro: false };
 
+// Plugins opcionales (el horario es la app): deciden qué pestañas se ven y
+// qué items lleva la bandeja.
+const PLUGIN_IDS = ['timer', 'metro', 'todo'];
+const plugins = { timer: false, metro: false, todo: false };
+
+// ───────────────────────── Horario ─────────────────────────
+// Bloques semanales: { id, title, start, end, days, color }. start/end en
+// minutos desde las 00:00; days con 0 = lunes. Viven aquí (no en la página)
+// para poder avisar y mostrar el bloque actual con la ventana oculta.
+
+const DAY_MIN = 24 * 60;
+const MAX_BLOCKS = 500;
+let blocks = [];
+let nowBlock = null;          // bloque en curso (o null)
+const notified = new Set();   // `${id}@${fecha}` ya avisados hoy
+let notifiedDate = '';
+
+const hhmm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+function cleanBlocks(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const b of list.slice(0, MAX_BLOCKS)) {
+    if (!b || typeof b.id !== 'string') continue;
+    const start = Math.floor(Number(b.start));
+    const end = Math.floor(Number(b.end));
+    if (!(start >= 0 && end <= DAY_MIN && end > start)) continue;
+    const days = Array.isArray(b.days)
+      ? [...new Set(b.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort()
+      : [];
+    if (!days.length) continue;
+    out.push({
+      id: b.id.slice(0, 40),
+      title: typeof b.title === 'string' ? b.title.slice(0, 200) : '',
+      start, end, days,
+      color: typeof b.color === 'string' ? b.color.slice(0, 20) : 'cyan',
+    });
+  }
+  return out;
+}
+
+function nowInfo() {
+  const d = new Date();
+  return {
+    day: (d.getDay() + 6) % 7,
+    min: d.getHours() * 60 + d.getMinutes(),
+    date: `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`,
+  };
+}
+
+function currentBlock({ day, min }) {
+  // si se solapan, gana el que empezó más tarde (el más "nuevo")
+  let best = null;
+  for (const b of blocks) {
+    if (b.days.includes(day) && b.start <= min && min < b.end && (!best || b.start > best.start)) best = b;
+  }
+  return best;
+}
+
+// Siguiente inicio a partir de ahora: hoy y luego los 7 días siguientes.
+function nextBlock({ day, min }) {
+  for (let k = 0; k <= 7; k++) {
+    const d = (day + k) % 7;
+    let best = null;
+    for (const b of blocks) {
+      if (!b.days.includes(d) || (k === 0 && b.start <= min)) continue;
+      if (!best || b.start < best.start) best = b;
+    }
+    if (best) return { ...best, inDays: k, day: d };
+  }
+  return null;
+}
+
+let nextSig = '';
+
+function widgetState() {
+  return { on: widget.on, now: nowBlock, next: nextBlock(nowInfo()) };
+}
+
+function checkSchedule() {
+  if (!app) return;
+  const n = nowInfo();
+  if (n.date !== notifiedDate) {
+    notified.clear();
+    notifiedDate = n.date;
+  }
+  for (const b of blocks) {
+    if (!b.days.includes(n.day) || n.min < b.start || n.min >= b.start + 1) continue;
+    const key = `${b.id}@${n.date}`;
+    if (notified.has(key)) continue;
+    notified.add(key);
+    app.notify(`Empieza: ${b.title || 'Sin título'}`, `${hhmm(b.start)} – ${hhmm(b.end)}`, { sound: true });
+    alertBlock = b.id;
+  }
+  const cur = currentBlock(n);
+  const sig = (x) => (x ? `${x.id}|${x.title}|${x.end}` : '');
+  const nx = nextBlock(n);
+  const nsig = nx ? `${sig(nx)}|${nx.start}|${nx.inDays}|${nx.color}` : '';
+  const changed = sig(cur) !== sig(nowBlock) || (cur && nowBlock && cur.color !== nowBlock.color);
+  if (changed) {
+    nowBlock = cur;
+    app.push('now-block', nowBlock);
+    updateTray();
+  }
+  if (changed || nsig !== nextSig) {
+    nextSig = nsig;
+    app.push('widget', widgetState());
+  }
+  // el destello va después del estado nuevo, para que se vea con su color
+  if (alertBlock) {
+    const b = blocks.find((x) => x.id === alertBlock);
+    alertBlock = null;
+    if (b && widget.on) app.push('widget-alert', { id: b.id, color: b.color });
+  }
+}
+
+// ───────────────────────── Widget ─────────────────────────
+// Ventanita siempre encima con el bloque actual. Es una ventana aparte y
+// visible, así que su página no se congela al ocultar la principal.
+
+const WIDGET_W = 300;
+const WIDGET_H = 92;
+const widget = { on: true, open: false, pos: null, lastSaved: '' };
+let alertBlock = null;
+
+async function widgetPosition() {
+  if (widget.pos) return widget.pos;
+  try {
+    const screens = await app.screens();
+    const s = screens.find((x) => x.primary) || screens[0];
+    const v = (s && s.visible) || s;
+    if (v) return { x: v.x + v.width - WIDGET_W - 16, y: v.y + v.height - WIDGET_H - 16 };
+  } catch {}
+  return { x: 40, y: 40 };
+}
+
+async function openWidget() {
+  if (widget.open) return;
+  widget.open = true;
+  const { x, y } = await widgetPosition();
+  app.win.open('widget', {
+    page: 'widget.html',
+    title: 'Tempo — Ahora',
+    size: `${WIDGET_W}x${WIDGET_H}`,
+    minSize: `${WIDGET_W}x${WIDGET_H}`,
+    x, y,
+    chrome: { frame: false, windowControls: false, acceptsFirstMouse: true },
+  });
+  const w = app.window('widget');
+  w.setResizable(false);
+  w.setAlwaysOnTop(true);
+  w.show({ activate: false });
+}
+
+function closeWidget() {
+  if (!widget.open) return;
+  widget.open = false;
+  try { app.win.close('widget'); } catch {}
+}
+
+async function setWidgetOn(on) {
+  widget.on = !!on;
+  await app.store.set('widget', widget.on);
+  if (widget.on) await openWidget();
+  else closeWidget();
+  app.push('widget', widgetState());
+  updateTray();
+}
+
+// Guarda la posición cuando el usuario arrastra el widget.
+async function pollWidget() {
+  if (!widget.open) return;
+  const st = await app.window('widget').getState();
+  if (!st) return;
+  const key = `${st.x},${st.y}`;
+  if (key === widget.lastSaved) return;
+  widget.lastSaved = key;
+  widget.pos = { x: st.x, y: st.y };
+  await app.store.set('widgetPos', widget.pos);
+}
+
 function trayLabels() {
   const s = timer.status;
   return {
@@ -69,12 +250,15 @@ function trayLabels() {
       : s === 'paused' ? 'Reanudar temporizador'
       : 'Iniciar temporizador',
     metro: tray.metro ? 'Parar metrónomo' : 'Iniciar metrónomo',
+    widget: widget.on ? 'Ocultar widget' : 'Mostrar widget',
+    now: nowBlock ? `Ahora: ${nowBlock.title || 'Sin título'} (hasta ${hhmm(nowBlock.end)})` : 'Sin actividad ahora',
   };
 }
 
 function trayTooltip() {
   if (timer.status === 'running') return `${APP_TITLE} — ${fmt(remainingMs())} restantes`;
   if (timer.status === 'paused') return `${APP_TITLE} — en pausa, ${fmt(remainingMs())}`;
+  if (nowBlock) return `${APP_TITLE} — Ahora: ${nowBlock.title || 'Sin título'} (hasta ${hhmm(nowBlock.end)})`;
   return APP_TITLE;
 }
 
@@ -88,10 +272,13 @@ function setTray() {
     primaryAction: true,
     tooltip: tray.tooltip,
     menu: [
+      { id: 'now', label: l.now, enabled: false },
+      { separator: true },
       { id: 'show', label: l.show },
       { separator: true },
-      { id: 'timer', label: l.timer },
-      { id: 'metro', label: l.metro },
+      ...(plugins.timer ? [{ id: 'timer', label: l.timer }] : []),
+      ...(plugins.metro ? [{ id: 'metro', label: l.metro }] : []),
+      { id: 'widget', label: l.widget },
       { separator: true },
       { id: 'quit', label: 'Salir' },
     ],
@@ -104,7 +291,8 @@ function updateTray() {
   if (!app) return;
   if (trayTooltip() !== tray.tooltip) return setTray();
   const l = trayLabels();
-  for (const id of ['show', 'timer', 'metro']) {
+  for (const id of ['now', 'show', 'timer', 'metro', 'widget']) {
+    if ((id === 'timer' || id === 'metro') && !plugins[id]) continue;
     if (l[id] !== tray.labels[id]) app.menu.update(id, { label: l[id] });
   }
   tray.labels = l;
@@ -130,8 +318,8 @@ function hideWindow() {
   tray.visible = false;
   updateTray();
   // margen para que la página pare el metrónomo antes de congelarse
-  if (wasPlaying) setTimeout(() => app.hide(), 150);
-  else app.hide();
+  if (wasPlaying) setTimeout(() => app.hide({ app: false }), 150);
+  else app.hide({ app: false });
 }
 
 // El cierre con la X lo oculta el launcher sin pasar por aquí: se vigila la
@@ -236,6 +424,47 @@ export const api = {
     return snapshot();
   },
 
+  async getPlugins() {
+    return { ...plugins };
+  },
+
+  async setPlugins(next = {}) {
+    for (const id of PLUGIN_IDS) if (id in next) plugins[id] = !!next[id];
+    await app.store.set('plugins', { ...plugins });
+    if (!plugins.timer && (timer.status !== 'idle')) await api.reset();
+    if (!plugins.metro) tray.metro = false;   // la página para el metrónomo
+    setTray();
+    app.push('plugins', { ...plugins });
+    return { ...plugins };
+  },
+
+  async getWidget() {
+    return widgetState();
+  },
+
+  async setWidget({ on } = {}) {
+    await setWidgetOn(on);
+    return widgetState();
+  },
+
+  // Desde el widget: abre la ventana principal en el horario.
+  async showSchedule() {
+    showWindow();
+    app.push('show-tab', 'sched');
+  },
+
+  async getBlocks() {
+    return blocks;
+  },
+
+  async saveBlocks({ blocks: list } = {}) {
+    blocks = cleanBlocks(list);
+    await app.store.set('blocks', blocks);
+    app.push('blocks', blocks);
+    checkSchedule();
+    return blocks;
+  },
+
   // La página avisa de cada arranque/parada del metrónomo (etiqueta de la bandeja).
   async metroState({ running } = {}) {
     tray.metro = !!running;
@@ -247,6 +476,8 @@ export async function onTray(id) {
   if (id === null || id === 'show') {
     if (tray.visible) hideWindow();
     else showWindow();
+  } else if ((id === 'timer' || id === 'metro') && !plugins[id]) {
+    // plugin desactivado: no hay nada que hacer
   } else if (id === 'timer') {
     const s = timer.status;
     if (s === 'running') await api.pause();
@@ -256,8 +487,20 @@ export async function onTray(id) {
     // lo arranca/para la página (recibe el mismo evento 'tray'); oculta
     // está congelada, así que primero se muestra
     if (!tray.visible) showWindow();
+  } else if (id === 'widget') {
+    await setWidgetOn(!widget.on);
   } else if (id === 'quit') {
     app.quit();
+  }
+}
+
+export function onWindowClosed(id) {
+  const wid = typeof id === 'string' ? id : id && (id.id || id.win);
+  if (wid === 'widget' && widget.open) {
+    widget.open = false;
+    widget.on = false;
+    app.store.set('widget', false);
+    updateTray();
   }
 }
 
@@ -270,10 +513,29 @@ export async function init(a) {
   app.setTitle(APP_TITLE);
   const saved = await app.store.get('lastDuration');
   if (Number.isFinite(saved) && saved >= 1 && saved <= MAX_SECONDS) lastDuration = saved;
+  const savedPlugins = await app.store.get('plugins');
+  if (savedPlugins && typeof savedPlugins === 'object') {
+    for (const id of PLUGIN_IDS) plugins[id] = !!savedPlugins[id];
+  }
+  blocks = cleanBlocks(await app.store.get('blocks'));
+  nowBlock = currentBlock(nowInfo());
+  const wOn = await app.store.get('widget');
+  widget.on = wOn !== false;
+  const wPos = await app.store.get('widgetPos');
+  if (wPos && Number.isFinite(wPos.x) && Number.isFinite(wPos.y)) {
+    widget.pos = { x: wPos.x, y: wPos.y };
+    widget.lastSaved = `${wPos.x},${wPos.y}`;
+  }
 
   const res = (await app.paths()).resources;
   tray.icon = res ? res + '/tray.png' : '';
   app.setHideOnClose(true);
   setTray();
   setInterval(() => pollWindow().catch(() => {}), 500);
+  checkSchedule();
+  setInterval(checkSchedule, 5000);
+  setInterval(() => pollWidget().catch(() => {}), 1000);
+  if (widget.on) openWidget().catch(() => { widget.open = false; });
 }
+
+

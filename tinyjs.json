@@ -2,7 +2,7 @@
   "$schema": "https://tinyjs.app/schema/tinyjs.schema.json",
   "name": "tempo",
   "title": "Tempo",
-  "size": "480x600",
+  "size": "980x700",
   "id": "com.mobasergio.tempo",
   "version": "1.1.0",
   "minTinyjsVersion": "0.61.0",

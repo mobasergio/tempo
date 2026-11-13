@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tempo — Ahora</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="widget-page">
+<div class="widget" id="widget" data-tiny-drag>
+  <div class="w-top">
+    <button class="w-title" id="wTitle" data-tiny-nodrag title="Abrir el horario">Sin actividad</button>
+    <button class="w-close" id="wClose" data-tiny-nodrag aria-label="Ocultar widget" title="Ocultar widget">×</button>
+  </div>
+  <div class="w-mid">
+    <span class="w-count" id="wCount"></span>
+    <span class="w-until" id="wUntil"></span>
+  </div>
+  <div class="w-bar"><div class="w-fill" id="wFill"></div></div>
+  <div class="w-next" id="wNext"></div>
+</div>
+<script src="widget.js"></script>
+</body>
+</html>

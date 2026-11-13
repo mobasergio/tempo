@@ -5,24 +5,72 @@ const BPM_MAX = 240;
 const METERS = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8', '9/8', '12/8'];
 const beatsOf = (meter) => Number(meter.split('/')[0]);   // en x/8 se marca la corchea
 
-let activeTab = 'timer';
+let activeTab = 'sched';
+let plugins = { timer: false, metro: false, todo: false };
+const PLUGIN_TABS = ['timer', 'metro', 'todo'];
+const tabAvailable = (name) => name === 'sched' || (PLUGIN_TABS.includes(name) && plugins[name]);
 
 // ───────────────────────── Pestañas ─────────────────────────
 
 function showTab(name) {
+  if (!tabAvailable(name)) name = 'sched';
   activeTab = name;
   for (const btn of document.querySelectorAll('.tab')) {
     const on = btn.dataset.tab === name;
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-selected', on);
   }
-  for (const p of ['timer', 'metro', 'todo']) $('panel-' + p).hidden = name !== p;
+  for (const p of ['timer', 'metro', 'todo', 'sched']) $('panel-' + p).hidden = name !== p;
+  if (name === 'sched' && typeof schedShown === 'function') schedShown();
 }
 
 for (const btn of document.querySelectorAll('.tab')) {
   btn.addEventListener('click', () => {
     showTab(btn.dataset.tab);
     tiny.store.set('activeTab', btn.dataset.tab);
+  });
+}
+
+// ───────────────────────── Plugins ─────────────────────────
+// El horario es la app; temporizador, metrónomo y tareas son opcionales.
+
+function applyPlugins(p) {
+  if (!p) return;
+  plugins = { timer: !!p.timer, metro: !!p.metro, todo: !!p.todo };
+  for (const id of PLUGIN_TABS) {
+    $('tab-' + id).hidden = !plugins[id];
+    const box = document.querySelector(`.toggle[data-plugin="${id}"]`);
+    if (box) box.checked = plugins[id];
+  }
+  if (!plugins.metro && metro.running) toggleMetro();
+  if (!tabAvailable(activeTab)) {
+    showTab('sched');
+    tiny.store.set('activeTab', 'sched');
+  }
+  if (typeof schedPluginsChanged === 'function') schedPluginsChanged();
+}
+
+tiny.api.on('plugins', applyPlugins);
+
+function setPluginsMenu(open) {
+  $('pluginsMenu').hidden = !open;
+  $('pluginsBtn').setAttribute('aria-expanded', open);
+}
+$('pluginsBtn').addEventListener('click', () => setPluginsMenu($('pluginsMenu').hidden));
+document.addEventListener('pointerdown', (e) => {
+  if (!$('pluginsMenu').hidden && !e.target.closest('#pluginsMenu, #pluginsBtn')) setPluginsMenu(false);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('pluginsMenu').hidden) setPluginsMenu(false);
+});
+for (const box of document.querySelectorAll('.toggle[data-plugin]')) {
+  box.addEventListener('change', async () => {
+    try {
+      applyPlugins(await tiny.api.call('setPlugins', { [box.dataset.plugin]: box.checked }));
+    } catch (e) {
+      box.checked = !box.checked;
+      console.error('setPlugins', e);
+    }
   });
 }
 
@@ -116,6 +164,13 @@ function startTimer(seconds = customSeconds()) {
   call('start', { seconds });
 }
 
+// Usado por el horario: arranca el temporizador y salta a su pestaña.
+function startTimerFor(seconds) {
+  startTimer(Math.max(1, Math.round(seconds)));
+  showTab('timer');
+  tiny.store.set('activeTab', 'timer');
+}
+
 function toggleTimer() {
   const s = timerState.status;
   if (s === 'running') call('pause');
@@ -124,6 +179,13 @@ function toggleTimer() {
 }
 
 tiny.api.on('timer', renderTimer);
+
+// El widget pide abrir el horario.
+tiny.api.on('show-tab', (name) => {
+  if (!tabAvailable(name)) return;
+  showTab(name);
+  tiny.store.set('activeTab', name);
+});
 
 // Los presets solo eligen la duración; el temporizador arranca con Iniciar.
 for (const b of $('presets').children) {
@@ -595,7 +657,11 @@ async function boot() {
   const [tab, bpm, meter, accents, volume, savedTodos] = await Promise.all(
     ['activeTab', 'bpm', 'meter', 'accents', 'volume', 'todos'].map((k) => tiny.store.get(k)));
 
-  showTab(['metro', 'todo'].includes(tab) ? tab : 'timer');
+  // ventanas guardadas con el tamaño de la versión anterior
+  tiny.win.setMinSize(720, 480);
+  if (innerWidth < 900) tiny.win.setSize(980, 700);
+  applyPlugins(await tiny.api.call('getPlugins'));
+  showTab(tabAvailable(tab) ? tab : 'sched');
   if (Array.isArray(savedTodos)) {
     todos = savedTodos
       .filter((t) => t && typeof t.text === 'string' && t.text.trim())
@@ -611,7 +677,7 @@ async function boot() {
   renderTimer(st);
 }
 
-showTab('timer');
+showTab('sched');
 buildScale();
 buildDots();
 setBpm(settings.bpm);

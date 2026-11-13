@@ -13,11 +13,32 @@
   <button class="btn link" id="updateInstall">Actualizar</button>
 </div>
 
-<nav class="tabs" role="tablist">
-  <button class="tab" role="tab" data-tab="timer" id="tab-timer">Temporizador</button>
-  <button class="tab" role="tab" data-tab="metro" id="tab-metro">Metrónomo</button>
-  <button class="tab" role="tab" data-tab="todo" id="tab-todo">Tareas</button>
-</nav>
+<header class="topbar">
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="sched" id="tab-sched">Horario</button>
+    <button class="tab" role="tab" data-tab="timer" id="tab-timer" hidden>Temporizador</button>
+    <button class="tab" role="tab" data-tab="metro" id="tab-metro" hidden>Metrónomo</button>
+    <button class="tab" role="tab" data-tab="todo" id="tab-todo" hidden>Tareas</button>
+  </nav>
+  <button class="plugins-btn" id="pluginsBtn" aria-label="Plugins" title="Plugins" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+  <div class="plugins-menu" id="pluginsMenu" hidden>
+    <div class="eyebrow">Plugins</div>
+    <label class="plugin-row">
+      <span><b>Temporizador</b><small>Cuenta atrás; se puede iniciar desde un bloque</small></span>
+      <input type="checkbox" class="toggle" data-plugin="timer">
+    </label>
+    <label class="plugin-row">
+      <span><b>Metrónomo</b><small>Tempo, compás y acentos</small></span>
+      <input type="checkbox" class="toggle" data-plugin="metro">
+    </label>
+    <label class="plugin-row">
+      <span><b>Tareas</b><small>Lista de pendientes</small></span>
+      <input type="checkbox" class="toggle" data-plugin="todo">
+    </label>
+  </div>
+</header>
 
 <!-- ───────── Temporizador ───────── -->
 <section class="panel timer" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
@@ -122,7 +143,46 @@
   <p class="hint"><kbd>Intro</kbd> añadir · doble clic para editar · arrastra <span class="grip-glyph">⋮⋮</span> para ordenar</p>
 </section>
 
+<!-- ───────── Horario ───────── -->
+<section class="panel sched" id="panel-sched" role="tabpanel" aria-labelledby="tab-sched" hidden>
+  <div class="sched-body" id="schedBody">
+    <div class="sched-head" id="schedHead"></div>
+    <div class="sched-grid" id="schedGrid">
+      <div class="sched-hours" id="schedHours"></div>
+      <!-- columnas L–D generadas por schedule.js -->
+    </div>
+  </div>
+  <div class="sched-foot">
+    <p class="hint">Arrastra para crear un bloque · clic para editar · <kbd>Supr</kbd> eliminar el seleccionado</p>
+    <button class="btn link" id="schedWidget">Mostrar widget</button>
+  </div>
+
+  <form class="sched-editor" id="schedEditor" autocomplete="off" hidden>
+    <input type="text" class="field" id="edTitle" placeholder="Actividad…" maxlength="200" aria-label="Actividad">
+    <div class="ed-row">
+      <input type="time" class="field ed-time" id="edStart" step="900" aria-label="Inicio">
+      <span class="ed-dash">–</span>
+      <input type="time" class="field ed-time" id="edEnd" step="900" aria-label="Fin">
+      <span class="ed-dur" id="edDur"></span>
+    </div>
+    <div class="seg full" id="edDays" aria-label="Días"></div>
+    <div class="ed-quick">
+      <button type="button" class="btn link" data-days="0,1,2,3,4,5,6">Todos</button>
+      <button type="button" class="btn link" data-days="0,1,2,3,4">L–V</button>
+      <button type="button" class="btn link" data-days="5,6">Fin de semana</button>
+    </div>
+    <div class="ed-colors" id="edColors" aria-label="Color"></div>
+    <p class="ed-err" id="edErr" hidden></p>
+    <div class="ed-actions">
+      <button type="button" class="btn link danger" id="edDelete">Eliminar</button>
+      <button type="button" class="btn link" id="edTimer">Iniciar temporizador</button>
+      <button type="submit" class="btn primary">Guardar</button>
+    </div>
+  </form>
+</section>
+
 <script src="metronome.js"></script>
 <script src="app.js"></script>
+<script src="schedule.js"></script>
 </body>
 </html>
