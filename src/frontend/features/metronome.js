@@ -20,7 +20,7 @@ onmessage = (e) => {
   }
 };`;
 
-class Metronome {
+export class Metronome {
   constructor({ onBeat } = {}) {
     this.bpm = 100;
     this.beatsPerBar = 4;

@@ -41,7 +41,7 @@
 </header>
 
 <!-- ───────── Temporizador ───────── -->
-<section class="panel timer" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer">
+<section class="panel timer" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer" hidden>
   <div class="ring" id="ring">
     <svg viewBox="0 0 240 240" aria-hidden="true">
       <circle class="ring-track" cx="120" cy="120" r="110"></circle>
@@ -144,7 +144,7 @@
 </section>
 
 <!-- ───────── Horario ───────── -->
-<section class="panel sched" id="panel-sched" role="tabpanel" aria-labelledby="tab-sched" hidden>
+<section class="panel sched" id="panel-sched" role="tabpanel" aria-labelledby="tab-sched">
   <div class="sched-body" id="schedBody">
     <div class="sched-head" id="schedHead"></div>
     <div class="sched-grid" id="schedGrid">
@@ -153,7 +153,7 @@
     </div>
   </div>
   <div class="sched-foot">
-    <p class="hint">Arrastra para crear un bloque · clic para editar · <kbd>Supr</kbd> eliminar el seleccionado</p>
+    <p class="hint">Arrastra para crear un bloque · clic para editar · <kbd>Supr</kbd> elimina el seleccionado</p>
     <button class="btn link" id="schedWidget">Mostrar widget</button>
   </div>
 
@@ -181,8 +181,6 @@
   </form>
 </section>
 
-<script src="metronome.js"></script>
-<script src="app.js"></script>
-<script src="schedule.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
