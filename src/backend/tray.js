@@ -6,28 +6,27 @@
 
 import { fmtClock, hhmm } from '../shared/time.js';
 
-export function createTray({ app, title, icon, plugins, timer, schedule, widget }) {
+export function createTray({ app, title, t, icon, plugins, timer, schedule, widget }) {
   const tray = { tooltip: null, labels: {}, visible: true, metro: false };
 
   function labels() {
     const s = timer.status;
     const now = schedule.now;
     return {
-      show: tray.visible ? 'Ocultar ventana' : 'Mostrar ventana',
-      timer: s === 'running' ? 'Pausar temporizador'
-        : s === 'paused' ? 'Reanudar temporizador'
-        : 'Iniciar temporizador',
-      metro: tray.metro ? 'Parar metrónomo' : 'Iniciar metrónomo',
-      widget: widget.on ? 'Ocultar widget' : 'Mostrar widget',
-      now: now ? `Ahora: ${now.title || 'Sin título'} (hasta ${hhmm(now.end)})` : 'Sin actividad ahora',
+      show: t(tray.visible ? 'tray.hide' : 'tray.show'),
+      timer: t(s === 'running' ? 'tray.timerPause' : s === 'paused' ? 'tray.timerResume' : 'tray.timerStart'),
+      metro: t(tray.metro ? 'tray.metroStop' : 'tray.metroStart'),
+      widget: t(widget.on ? 'tray.widgetHide' : 'tray.widgetShow'),
+      now: now ? t('tray.now', { title: now.title || t('app.untitled'), end: hhmm(now.end) }) : t('tray.nothing'),
+      quit: t('tray.quit'),
     };
   }
 
   function tooltip() {
     const now = schedule.now;
-    if (timer.status === 'running') return `${title} — ${fmtClock(timer.remainingMs())} restantes`;
-    if (timer.status === 'paused') return `${title} — en pausa, ${fmtClock(timer.remainingMs())}`;
-    if (now) return `${title} — Ahora: ${now.title || 'Sin título'} (hasta ${hhmm(now.end)})`;
+    if (timer.status === 'running') return t('tray.tipRunning', { app: title, time: fmtClock(timer.remainingMs()) });
+    if (timer.status === 'paused') return t('tray.tipPaused', { app: title, time: fmtClock(timer.remainingMs()) });
+    if (now) return t('tray.tipNow', { app: title, title: now.title || t('app.untitled'), end: hhmm(now.end) });
     return title;
   }
 
@@ -49,7 +48,7 @@ export function createTray({ app, title, icon, plugins, timer, schedule, widget 
         ...(plugins.metro ? [{ id: 'metro', label: l.metro }] : []),
         { id: 'widget', label: l.widget },
         { separator: true },
-        { id: 'quit', label: 'Salir' },
+        { id: 'quit', label: l.quit },
       ],
     });
   }
@@ -70,7 +69,7 @@ export function createTray({ app, title, icon, plugins, timer, schedule, widget 
     if (!tray.metro) return;
     tray.metro = false;   // la página lo confirmará con metroState
     app.push('metro-stop', {});
-    app.notify('Metrónomo detenido', 'Se ha parado al ocultar la ventana: con la ventana oculta no puede sonar con precisión.');
+    app.notify(t('metro.stoppedTitle'), t('metro.stoppedBody'));
   }
 
   function show() {

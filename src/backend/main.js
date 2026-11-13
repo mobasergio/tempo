@@ -5,6 +5,7 @@ import { createTimer } from './timer.js';
 import { createSchedule } from './schedule.js';
 import { createWidget } from './widget.js';
 import { createTray } from './tray.js';
+import { createSettings } from './settings.js';
 
 const APP_TITLE = 'Tempo';
 
@@ -18,6 +19,10 @@ let timer = null;
 let schedule = null;
 let widget = null;
 let tray = null;
+let settings = null;
+
+// Traduce siempre con el idioma vigente (puede cambiar en Ajustes).
+const t = (key, vars) => settings.t(key, vars);
 
 const refreshTray = () => tray && tray.update();
 
@@ -60,6 +65,27 @@ export const api = {
   async getBlocks() { return schedule.blocks; },
   async saveBlocks({ blocks } = {}) { return schedule.save(blocks); },
 
+  // ── Ajustes ──
+  async getSettings() {
+    return {
+      settings: settings.get(),
+      plugins: { ...plugins },
+      widget: widget.on,
+      launchAtLogin: await settings.launchStatus(),
+    };
+  },
+
+  // patch: theme, lang, sysLang, notifySound, hotkey (ver shared/settings.js)
+  async setSettings(patch = {}) {
+    const s = await settings.set(patch);
+    app.push('settings', s);
+    return s;
+  },
+
+  async setLaunchAtLogin({ on } = {}) {
+    return settings.setLaunchAtLogin(on);
+  },
+
   // ── Metrónomo ──
   // La página avisa de cada arranque/parada (etiqueta de la bandeja).
   async metroState({ running } = {}) { tray.setMetro(running); },
@@ -83,6 +109,12 @@ export async function onTray(id) {
   }
 }
 
+// Atajo global de Ajustes: muestra u oculta la ventana.
+export function onHotkey(info) {
+  const id = typeof info === 'string' ? info : info && info.id;
+  if (id === settings.HOTKEY_ID) tray.toggleWindow();
+}
+
 export function onWindowClosed(id) {
   const wid = typeof id === 'string' ? id : id && (id.id || id.win);
   if (wid === 'widget') widget.closed();
@@ -97,6 +129,13 @@ export function onSystem(kind) {
   if (kind === 'wake' && schedule) schedule.resync();
 }
 
+// Idioma nuevo: la bandeja y el título del widget se rehacen aquí; las
+// páginas se recargan solas al recibir 'settings'.
+function applyLang() {
+  if (tray) tray.set();
+  try { app.window('widget').setTitle(t('widget.windowTitle', { app: APP_TITLE })); } catch {}
+}
+
 export async function init(a) {
   app = a;
   app.setTitle(APP_TITLE);
@@ -106,9 +145,14 @@ export async function init(a) {
     for (const id of PLUGIN_IDS) plugins[id] = !!savedPlugins[id];
   }
 
-  timer = createTimer({ app, title: APP_TITLE, onChange: refreshTray });
+  settings = createSettings({ app, onLangChange: applyLang });
+  await settings.load();
+
+  timer = createTimer({ app, title: APP_TITLE, t, onChange: refreshTray });
   schedule = createSchedule({
     app,
+    t,
+    getSettings: () => settings.get(),
     onNowChange: refreshTray,
     onWidgetChange: () => widget.push(),
     onStart: (b) => widget.alert(b),
@@ -116,6 +160,7 @@ export async function init(a) {
   widget = createWidget({
     app,
     title: APP_TITLE,
+    t,
     info: () => ({ now: schedule.now, next: schedule.next() }),
     onChange: refreshTray,
   });
@@ -126,7 +171,7 @@ export async function init(a) {
 
   const res = (await app.paths()).resources;
   tray = createTray({
-    app, title: APP_TITLE, icon: res ? res + '/tray.png' : '',
+    app, title: APP_TITLE, t, icon: res ? res + '/tray.png' : '',
     plugins, timer, schedule, widget,
   });
   app.setHideOnClose(true);

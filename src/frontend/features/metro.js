@@ -28,6 +28,7 @@ const pct = (bpm) => (bpmToPos(bpm) * 100).toFixed(3) + '%';
 const tempoIndex = (bpm) => TEMPOS.findLastIndex(([, from]) => bpm >= from);
 
 export function initMetro(ctx) {
+  const { t } = ctx;
   const metro = new Metronome({ onBeat: lightDot });
   const settings = { bpm: 100, meter: '4/4', accents: [0], volume: 0.8 };
   let lastVolume = settings.volume;   // para restaurar al quitar el silencio
@@ -43,7 +44,7 @@ export function initMetro(ctx) {
       const accented = settings.accents.includes(i);
       d.className = 'dot' + (accented ? ' accent' : '');
       d.setAttribute('aria-pressed', accented);
-      d.setAttribute('aria-label', `Acento en el pulso ${i + 1}`);
+      d.setAttribute('aria-label', t('metro.accent', { n: i + 1 }));
       d.addEventListener('click', () => toggleAccent(i));
       box.appendChild(d);
     }
@@ -98,7 +99,7 @@ export function initMetro(ctx) {
     $('meter').setAttribute('aria-valuetext', m);
     $('meterPrev').disabled = i === 0;
     $('meterNext').disabled = i === METERS.length - 1;
-    $('bpmNote').textContent = den === '8' ? 'pulso de corchea' : '';
+    $('bpmNote').textContent = den === '8' ? t('metro.eighth') : '';
     metro.setBeatsPerBar(beatsOf(m));
     save('meter', m, 0);
     setAccents(accents.filter((b) => b < beatsOf(m)));
@@ -128,17 +129,17 @@ export function initMetro(ctx) {
     $('volRange').value = pctVol;
     $('volRange').style.setProperty('--fill', pctVol + '%');
     $('volRange').setAttribute('aria-valuetext', pctVol + ' %');
-    $('volume').title = `Volumen ${pctVol} %`;
+    $('volume').title = t('metro.volumeTitle', { n: pctVol });
     // el icono muestra 0, 1 o 2 ondas según el nivel
     $('volume').dataset.level = pctVol === 0 ? 0 : pctVol < 50 ? 1 : 2;
-    $('volMute').setAttribute('aria-label', pctVol === 0 ? 'Activar sonido' : 'Silenciar');
+    $('volMute').setAttribute('aria-label', t(pctVol === 0 ? 'metro.unmute' : 'metro.mute'));
     metro.setVolume(settings.volume);
     save('volume', settings.volume);
   }
 
   function toggle() {
     const running = metro.toggle();
-    $('metroToggle').textContent = running ? 'Parar' : 'Iniciar';
+    $('metroToggle').textContent = t(running ? 'metro.stop' : 'metro.start');
     $('metroToggle').classList.toggle('stop', running);
     if (running) $('metroNotice').hidden = true;
     tiny.api.call('metroState', { running });

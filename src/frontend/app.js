@@ -1,18 +1,29 @@
-// Shell de la ventana principal: pestañas, plugins, atajos y arranque. Cada
-// pestaña es una feature (features/*.js) que se registra con registerTab y
-// recibe el contexto `ctx`; no comparten variables globales.
+// Shell de la ventana principal: ajustes, idioma, tema, pestañas, plugins,
+// atajos y arranque. Cada pestaña es una feature (features/*.js) que se
+// registra con registerTab y recibe el contexto `ctx`; no comparten globales.
 
 import { $, isEditable } from './lib/util.js';
 import { createState } from './lib/state.js';
+import { setupI18n } from './lib/i18n.js';
+import { cleanSettings } from '../shared/settings.js';
 import { initSchedule } from './features/schedule.js';
 import { initTimer } from './features/timer.js';
 import { initMetro } from './features/metro.js';
 import { initTodo } from './features/todo.js';
 import { initUpdate } from './features/update.js';
+import { initSettings } from './features/settings.js';
 
 // El horario es la app; temporizador, metrónomo y tareas son opcionales.
 const PLUGIN_IDS = ['timer', 'metro', 'todo'];
 const PANELS = ['sched', ...PLUGIN_IDS];
+
+// Los ajustes deciden idioma y tema antes de construir nada (si el backend
+// fallara, se sigue con los valores por defecto en vez de dejar la página muerta).
+const initial = await tiny.api.call('getSettings').catch((e) => {
+  console.error('getSettings', e);
+  return { settings: cleanSettings(null), plugins: {}, widget: false, launchAtLogin: 'unsupported' };
+});
+const t = setupI18n(initial.settings);
 
 const state = createState({
   activeTab: 'sched',
@@ -36,10 +47,21 @@ function showTab(name, { persist = false } = {}) {
   if (persist) tiny.store.set('activeTab', name);
 }
 
+function applyPlugins(p) {
+  if (!p) return;
+  state.set({ plugins: { timer: !!p.timer, metro: !!p.metro, todo: !!p.todo } });
+  const { plugins, activeTab } = state.get();
+  for (const id of PLUGIN_IDS) $('tab-' + id).hidden = !plugins[id];
+  if (!tabAvailable(activeTab)) showTab('sched', { persist: true });
+}
+
 const ctx = {
+  t,
   state,
   showTab,
   tabAvailable,
+  applyPlugins,
+  modalOpen: false,
   registerTab(name, handlers) { tabs[name] = handlers; },
 };
 
@@ -51,50 +73,13 @@ for (const btn of document.querySelectorAll('.tab')) {
 tiny.api.on('show-tab', (name) => {
   if (tabAvailable(name)) showTab(name, { persist: true });
 });
-
-// ───────────────────────── Plugins ─────────────────────────
-
-function applyPlugins(p) {
-  if (!p) return;
-  state.set({ plugins: { timer: !!p.timer, metro: !!p.metro, todo: !!p.todo } });
-  const { plugins, activeTab } = state.get();
-  for (const id of PLUGIN_IDS) {
-    $('tab-' + id).hidden = !plugins[id];
-    const box = document.querySelector(`.toggle[data-plugin="${id}"]`);
-    if (box) box.checked = plugins[id];
-  }
-  if (!tabAvailable(activeTab)) showTab('sched', { persist: true });
-}
-
 tiny.api.on('plugins', applyPlugins);
-
-function setPluginsMenu(open) {
-  $('pluginsMenu').hidden = !open;
-  $('pluginsBtn').setAttribute('aria-expanded', open);
-}
-$('pluginsBtn').addEventListener('click', () => setPluginsMenu($('pluginsMenu').hidden));
-document.addEventListener('pointerdown', (e) => {
-  if (!$('pluginsMenu').hidden && !e.target.closest('#pluginsMenu, #pluginsBtn')) setPluginsMenu(false);
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !$('pluginsMenu').hidden) setPluginsMenu(false);
-});
-for (const box of document.querySelectorAll('.toggle[data-plugin]')) {
-  box.addEventListener('change', async () => {
-    try {
-      applyPlugins(await tiny.api.call('setPlugins', { [box.dataset.plugin]: box.checked }));
-    } catch (e) {
-      box.checked = !box.checked;
-      console.error('setPlugins', e);
-    }
-  });
-}
 
 // ───────────────────── Atajos de teclado ─────────────────────
 // Cada pestaña atiende sus teclas con onKey; aquí solo se filtra.
 
 document.addEventListener('keydown', (e) => {
-  if (isEditable(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (ctx.modalOpen || isEditable(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
   if (e.code === 'Space') {
     e.preventDefault();          // que no "pulse" también el botón enfocado
     if (e.repeat) return;
@@ -105,7 +90,7 @@ document.addEventListener('keydown', (e) => {
 // Tras un clic, quita el foco del botón para que Espacio no lo reactive.
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
-  if (b) b.blur();
+  if (b && !b.hasAttribute('data-keep-focus')) b.blur();
 });
 
 // ───────────────────────── Arranque ─────────────────────────
@@ -117,7 +102,9 @@ const features = [
   initMetro(ctx),
   initTodo(ctx),
 ];
-initUpdate();
+initUpdate(ctx);
+initSettings(ctx, initial);
+applyPlugins(initial.plugins);
 
 async function boot() {
   const [tab, sizeFixed] = await Promise.all([tiny.store.get('activeTab'), tiny.store.get('sizeMigrated')]);
@@ -130,11 +117,12 @@ async function boot() {
     tiny.store.set('sizeMigrated', true);
   }
 
-  applyPlugins(await tiny.api.call('getPlugins'));
   // cada feature arranca por su cuenta: un fallo no impide el resto
   const results = await Promise.allSettled(features.map((f) => f.boot()));
   for (const r of results) if (r.status === 'rejected') console.error('boot', r.reason);
   showTab(tabAvailable(tab) ? tab : 'sched');
 }
 
-boot().catch((e) => console.error('boot', e));
+boot()
+  .catch((e) => console.error('boot', e))
+  .finally(() => document.documentElement.classList.remove('i18n-pending'));

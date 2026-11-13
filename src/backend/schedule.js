@@ -9,7 +9,7 @@ import { cleanBlocks, currentBlock, nextBlock, blocksStartingIn } from '../share
 // no tiene sentido avisar de que "empieza" algo.
 const NOTIFY_GRACE_MIN = 2;
 
-export function createSchedule({ app, onNowChange, onWidgetChange, onStart }) {
+export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChange, onStart }) {
   let blocks = [];
   let nowBlock = null;
   const notified = new Set();   // `${id}@${fecha}` ya avisados hoy
@@ -35,7 +35,8 @@ export function createSchedule({ app, onNowChange, onWidgetChange, onStart }) {
       const key = `${b.id}@${n.date}`;
       if (notified.has(key)) continue;
       notified.add(key);
-      app.notify(`Empieza: ${b.title || 'Sin título'}`, `${hhmm(b.start)} – ${hhmm(b.end)}`, { sound: true });
+      app.notify(t('notify.start', { title: b.title || t('app.untitled') }), `${hhmm(b.start)} – ${hhmm(b.end)}`,
+        { sound: getSettings().notifySound });
       started.push(b);
     }
 

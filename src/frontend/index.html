@@ -3,42 +3,108 @@
 <head>
 <meta charset="utf-8">
 <title>Tempo</title>
+<!-- Antes de pintar: tema de la última sesión y página oculta hasta traducirla
+     (con un límite, por si el arranque fallara). -->
+<script>
+  (function () {
+    var d = document.documentElement;
+    try { d.dataset.theme = localStorage.getItem('tempo.theme') || 'dark'; } catch (e) { d.dataset.theme = 'dark'; }
+    d.classList.add('i18n-pending');
+    setTimeout(function () { d.classList.remove('i18n-pending'); }, 1500);
+  })();
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <div class="update-bar" id="updateBar" role="status" hidden>
-  <span>Nueva versión <span id="updateVer"></span> disponible</span>
+  <span id="updateMsg"></span>
   <span id="updateErr" hidden></span>
-  <button class="btn link" id="updateInstall">Actualizar</button>
+  <button class="btn link" id="updateInstall" data-i18n="update.install">Actualizar</button>
 </div>
 
 <header class="topbar">
   <nav class="tabs" role="tablist">
-    <button class="tab" role="tab" data-tab="sched" id="tab-sched">Horario</button>
-    <button class="tab" role="tab" data-tab="timer" id="tab-timer" hidden>Temporizador</button>
-    <button class="tab" role="tab" data-tab="metro" id="tab-metro" hidden>Metrónomo</button>
-    <button class="tab" role="tab" data-tab="todo" id="tab-todo" hidden>Tareas</button>
+    <button class="tab" role="tab" data-tab="sched" id="tab-sched" data-i18n="tab.sched">Horario</button>
+    <button class="tab" role="tab" data-tab="timer" id="tab-timer" data-i18n="tab.timer" hidden>Temporizador</button>
+    <button class="tab" role="tab" data-tab="metro" id="tab-metro" data-i18n="tab.metro" hidden>Metrónomo</button>
+    <button class="tab" role="tab" data-tab="todo" id="tab-todo" data-i18n="tab.todo" hidden>Tareas</button>
   </nav>
-  <button class="plugins-btn" id="pluginsBtn" aria-label="Plugins" title="Plugins" aria-expanded="false">
+  <button class="settings-btn" id="settingsBtn" data-i18n-aria="settings.open" data-i18n-title="settings.open"
+          aria-label="Ajustes" title="Ajustes" aria-haspopup="dialog">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
   </button>
-  <div class="plugins-menu" id="pluginsMenu" hidden>
-    <div class="eyebrow">Plugins</div>
-    <label class="plugin-row">
-      <span><b>Temporizador</b><small>Cuenta atrás; se puede iniciar desde un bloque</small></span>
-      <input type="checkbox" class="toggle" data-plugin="timer">
-    </label>
-    <label class="plugin-row">
-      <span><b>Metrónomo</b><small>Tempo, compás y acentos</small></span>
-      <input type="checkbox" class="toggle" data-plugin="metro">
-    </label>
-    <label class="plugin-row">
-      <span><b>Tareas</b><small>Lista de pendientes</small></span>
-      <input type="checkbox" class="toggle" data-plugin="todo">
-    </label>
-  </div>
 </header>
+
+<!-- ───────── Ajustes (modal) ───────── -->
+<div class="settings-scrim" id="settings" hidden>
+  <div class="settings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">
+    <div class="settings-head">
+      <h2 id="settingsTitle" data-i18n="settings.title">Ajustes</h2>
+      <button class="icon-btn" id="settingsClose" data-i18n-aria="settings.close" aria-label="Cerrar">×</button>
+    </div>
+    <div class="settings-body">
+      <section class="settings-sec">
+        <div class="eyebrow" data-i18n="settings.general">General</div>
+        <label class="plugin-row">
+          <span><b data-i18n="settings.launch">Arrancar con el sistema</b><small id="launchHint">Abre Tempo al iniciar sesión</small></span>
+          <input type="checkbox" class="toggle" id="setLaunch">
+        </label>
+        <label class="plugin-row">
+          <span><b data-i18n="settings.widget">Widget «Ahora»</b><small data-i18n="settings.widgetHint">Ventanita siempre visible con el bloque en curso</small></span>
+          <input type="checkbox" class="toggle" id="setWidget">
+        </label>
+        <label class="plugin-row">
+          <span><b data-i18n="settings.sound">Sonido de los avisos</b><small data-i18n="settings.soundHint">Al empezar cada bloque</small></span>
+          <input type="checkbox" class="toggle" id="setSound">
+        </label>
+        <div class="plugin-row">
+          <span><b data-i18n="settings.hotkey">Atajo global</b><small id="hotkeyHint">Muestra u oculta Tempo desde cualquier sitio</small></span>
+          <span class="hotkey-ctl">
+            <button class="hotkey-btn" id="setHotkey" type="button" data-keep-focus></button>
+            <button class="btn link" id="clearHotkey" type="button" data-i18n="settings.hotkeyClear">Quitar</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="settings-sec">
+        <div class="eyebrow" data-i18n="settings.appearance">Apariencia</div>
+        <div class="plugin-row static">
+          <b data-i18n="settings.theme">Tema</b>
+          <div class="seg" id="setTheme">
+            <button type="button" data-value="system" data-i18n="settings.themeSystem">Sistema</button>
+            <button type="button" data-value="light" data-i18n="settings.themeLight">Claro</button>
+            <button type="button" data-value="dark" data-i18n="settings.themeDark">Oscuro</button>
+          </div>
+        </div>
+        <div class="plugin-row static">
+          <b data-i18n="settings.lang">Idioma</b>
+          <div class="seg" id="setLang">
+            <button type="button" data-value="system" data-i18n="settings.langSystem">Sistema</button>
+            <button type="button" data-value="es" lang="es">Español</button>
+            <button type="button" data-value="en" lang="en">English</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-sec">
+        <div class="eyebrow" data-i18n="settings.plugins">Plugins</div>
+        <label class="plugin-row">
+          <span><b data-i18n="tab.timer">Temporizador</b><small data-i18n="plugin.timer.desc">Cuenta atrás; se puede iniciar desde un bloque</small></span>
+          <input type="checkbox" class="toggle" data-plugin="timer">
+        </label>
+        <label class="plugin-row">
+          <span><b data-i18n="tab.metro">Metrónomo</b><small data-i18n="plugin.metro.desc">Tempo, compás y acentos</small></span>
+          <input type="checkbox" class="toggle" data-plugin="metro">
+        </label>
+        <label class="plugin-row">
+          <span><b data-i18n="tab.todo">Tareas</b><small data-i18n="plugin.todo.desc">Lista de pendientes</small></span>
+          <input type="checkbox" class="toggle" data-plugin="todo">
+        </label>
+      </section>
+    </div>
+  </div>
+</div>
 
 <!-- ───────── Temporizador ───────── -->
 <section class="panel timer" id="panel-timer" role="tabpanel" aria-labelledby="tab-timer" hidden>
@@ -48,18 +114,18 @@
       <circle class="ring-fill" id="ringFill" cx="120" cy="120" r="110"></circle>
     </svg>
     <div class="ring-center">
-      <label class="time time-edit" id="timeEdit" title="Haz clic para cambiar la duración">
-        <input type="text" inputmode="numeric" id="customMin" maxlength="4" value="25" aria-label="Minutos">
+      <label class="time time-edit" id="timeEdit" data-i18n-title="timer.editHint" title="Haz clic para cambiar la duración">
+        <input type="text" inputmode="numeric" id="customMin" maxlength="4" value="25" data-i18n-aria="timer.minutes" aria-label="Minutos">
         <span>:</span>
-        <input type="text" inputmode="numeric" id="customSec" maxlength="2" value="00" aria-label="Segundos">
+        <input type="text" inputmode="numeric" id="customSec" maxlength="2" value="00" data-i18n-aria="timer.seconds" aria-label="Segundos">
       </label>
       <div class="time" id="timerDisplay" hidden>25:00</div>
-      <div class="status" id="timerStatus" role="status">Listo</div>
+      <div class="status" id="timerStatus" role="status" data-i18n="timer.status.idle">Listo</div>
     </div>
   </div>
 
   <div class="group">
-    <div class="eyebrow">Duración</div>
+    <div class="eyebrow" data-i18n="timer.duration">Duración</div>
     <div class="duration-row">
       <div class="seg" id="presets">
         <button data-min="5">5</button>
@@ -67,22 +133,22 @@
         <button data-min="25">25</button>
         <button data-min="45">45</button>
       </div>
-      <span class="unit">min</span>
+      <span class="unit" data-i18n="timer.min">min</span>
     </div>
   </div>
 
   <div class="actions">
-    <button class="btn primary" id="timerMain">Iniciar</button>
-    <button class="btn link" id="timerReset">Reiniciar</button>
+    <button class="btn primary" id="timerMain" data-i18n="timer.start">Iniciar</button>
+    <button class="btn link" id="timerReset" data-i18n="timer.reset">Reiniciar</button>
   </div>
 
-  <p class="hint"><kbd>Espacio</kbd> iniciar / pausar</p>
+  <p class="hint" data-i18n-html="timer.hintHtml"><kbd>Espacio</kbd> iniciar / pausar</p>
 </section>
 
 <!-- ───────── Metrónomo ───────── -->
 <section class="panel metro" id="panel-metro" role="tabpanel" aria-labelledby="tab-metro" hidden>
   <!-- Escala de metrónomo analógico: lento arriba, rápido abajo; la pesa marca el tempo -->
-  <div class="scale" id="scale" role="slider" tabindex="0" aria-label="Tempo"
+  <div class="scale" id="scale" role="slider" tabindex="0" data-i18n-aria="metro.tempo" aria-label="Tempo"
        aria-valuemin="30" aria-valuemax="240" aria-valuenow="100">
     <div class="rail" id="rail">
       <div class="weight" id="weight"></div>
@@ -98,16 +164,16 @@
 
     <!-- compás (fracción con ‹ ›) y pulsos: clic en un pulso lo acentúa -->
     <div class="beat-row">
-      <div class="meter" id="meter" role="spinbutton" tabindex="0" aria-label="Compás" title="Compás">
-        <button class="meter-arrow" id="meterPrev" tabindex="-1" aria-label="Compás anterior">‹</button>
+      <div class="meter" id="meter" role="spinbutton" tabindex="0" data-i18n-aria="metro.meter" data-i18n-title="metro.meter" aria-label="Compás" title="Compás">
+        <button class="meter-arrow" id="meterPrev" tabindex="-1" data-i18n-aria="metro.meterPrev" aria-label="Compás anterior">‹</button>
         <span class="frac"><span id="meterNum">4</span><span id="meterDen">4</span></span>
-        <button class="meter-arrow" id="meterNext" tabindex="-1" aria-label="Compás siguiente">›</button>
+        <button class="meter-arrow" id="meterNext" tabindex="-1" data-i18n-aria="metro.meterNext" aria-label="Compás siguiente">›</button>
       </div>
-      <div class="dots" id="dots" title="Clic en un pulso para acentuarlo"></div>
+      <div class="dots" id="dots" data-i18n-title="metro.dotsHint" title="Clic en un pulso para acentuarlo"></div>
     </div>
 
     <div class="volume" id="volume">
-      <button class="vol-icon" id="volMute" aria-label="Silenciar">
+      <button class="vol-icon" id="volMute" data-i18n-aria="metro.mute" aria-label="Silenciar">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path class="spk" d="M4 9h4l5-4v14l-5-4H4z"></path>
           <path class="wave w1" d="M16 9.5a3.5 3.5 0 0 1 0 5"></path>
@@ -115,32 +181,33 @@
           <path class="mute" d="M16.5 9.5l5 5m0-5l-5 5"></path>
         </svg>
       </button>
-      <input type="range" class="slider" id="volRange" min="0" max="100" value="80" aria-label="Volumen">
+      <input type="range" class="slider" id="volRange" min="0" max="100" value="80" data-i18n-aria="metro.volume" aria-label="Volumen">
     </div>
 
-    <button class="btn primary block" id="metroToggle">Iniciar</button>
+    <button class="btn primary block" id="metroToggle" data-i18n="metro.start">Iniciar</button>
 
-    <p class="notice" id="metroNotice" hidden>Se detuvo al ocultar la ventana.</p>
-    <p class="hint"><kbd>Espacio</kbd> iniciar / parar · <kbd>↑</kbd><kbd>↓</kbd> ±1</p>
+    <p class="notice" id="metroNotice" data-i18n="metro.stoppedHidden" hidden>Se detuvo al ocultar la ventana.</p>
+    <p class="hint" data-i18n-html="metro.hintHtml"><kbd>Espacio</kbd> iniciar / parar · <kbd>↑</kbd><kbd>↓</kbd> ±1</p>
   </div>
 </section>
 
 <!-- ───────── Tareas ───────── -->
 <section class="panel todo" id="panel-todo" role="tabpanel" aria-labelledby="tab-todo" hidden>
   <form class="todo-form" id="todoForm" autocomplete="off">
-    <input type="text" class="field" id="todoInput" placeholder="Nueva tarea…" maxlength="200" aria-label="Nueva tarea">
-    <button class="btn primary" type="submit">Añadir</button>
+    <input type="text" class="field" id="todoInput" maxlength="200"
+           data-i18n-placeholder="todo.placeholder" data-i18n-aria="todo.placeholder" placeholder="Nueva tarea…" aria-label="Nueva tarea">
+    <button class="btn primary" type="submit" data-i18n="todo.add">Añadir</button>
   </form>
 
-  <ul class="todo-list" id="todoList" aria-label="Tareas"></ul>
-  <p class="todo-empty" id="todoEmpty">No hay tareas</p>
+  <ul class="todo-list" id="todoList" data-i18n-aria="todo.list" aria-label="Tareas"></ul>
+  <p class="todo-empty" id="todoEmpty" data-i18n="todo.empty">No hay tareas</p>
 
   <div class="todo-foot">
     <span id="todoCount"></span>
-    <button class="btn link" id="todoClear">Borrar completadas</button>
+    <button class="btn link" id="todoClear" data-i18n="todo.clear">Borrar completadas</button>
   </div>
 
-  <p class="hint"><kbd>Intro</kbd> añadir · doble clic para editar · arrastra <span class="grip-glyph">⋮⋮</span> para ordenar</p>
+  <p class="hint" data-i18n-html="todo.hintHtml"><kbd>Intro</kbd> añadir · doble clic para editar · arrastra <span class="grip-glyph">⋮⋮</span> para ordenar</p>
 </section>
 
 <!-- ───────── Horario ───────── -->
@@ -149,34 +216,35 @@
     <div class="sched-head" id="schedHead"></div>
     <div class="sched-grid" id="schedGrid">
       <div class="sched-hours" id="schedHours"></div>
-      <!-- columnas L–D generadas por schedule.js -->
+      <!-- columnas L–D generadas por features/schedule.js -->
     </div>
   </div>
   <div class="sched-foot">
-    <p class="hint">Arrastra para crear un bloque · clic para editar · <kbd>Supr</kbd> elimina el seleccionado</p>
-    <button class="btn link" id="schedWidget">Mostrar widget</button>
+    <p class="hint" data-i18n-html="sched.hintHtml">Arrastra para crear un bloque · clic para editar · <kbd>Supr</kbd> elimina el seleccionado</p>
+    <button class="btn link" id="schedWidget" data-i18n="sched.widgetShow">Mostrar widget</button>
   </div>
 
   <form class="sched-editor" id="schedEditor" autocomplete="off" hidden>
-    <input type="text" class="field" id="edTitle" placeholder="Actividad…" maxlength="200" aria-label="Actividad">
+    <input type="text" class="field" id="edTitle" maxlength="200"
+           data-i18n-placeholder="sched.activity" data-i18n-aria="sched.activity" placeholder="Actividad…" aria-label="Actividad">
     <div class="ed-row">
-      <input type="time" class="field ed-time" id="edStart" step="900" aria-label="Inicio">
+      <input type="time" class="field ed-time" id="edStart" step="900" data-i18n-aria="sched.start" aria-label="Inicio">
       <span class="ed-dash">–</span>
-      <input type="time" class="field ed-time" id="edEnd" step="900" aria-label="Fin">
+      <input type="time" class="field ed-time" id="edEnd" step="900" data-i18n-aria="sched.end" aria-label="Fin">
       <span class="ed-dur" id="edDur"></span>
     </div>
-    <div class="seg full" id="edDays" aria-label="Días"></div>
+    <div class="seg full" id="edDays" data-i18n-aria="sched.days" aria-label="Días"></div>
     <div class="ed-quick">
-      <button type="button" class="btn link" data-days="0,1,2,3,4,5,6">Todos</button>
-      <button type="button" class="btn link" data-days="0,1,2,3,4">L–V</button>
-      <button type="button" class="btn link" data-days="5,6">Fin de semana</button>
+      <button type="button" class="btn link" data-days="0,1,2,3,4,5,6" data-i18n="sched.everyDay">Todos</button>
+      <button type="button" class="btn link" data-days="0,1,2,3,4" data-i18n="sched.weekdays">L–V</button>
+      <button type="button" class="btn link" data-days="5,6" data-i18n="sched.weekend">Fin de semana</button>
     </div>
-    <div class="ed-colors" id="edColors" aria-label="Color"></div>
+    <div class="ed-colors" id="edColors" data-i18n-aria="sched.color" aria-label="Color"></div>
     <p class="ed-err" id="edErr" hidden></p>
     <div class="ed-actions">
-      <button type="button" class="btn link danger" id="edDelete">Eliminar</button>
-      <button type="button" class="btn link" id="edTimer">Iniciar temporizador</button>
-      <button type="submit" class="btn primary">Guardar</button>
+      <button type="button" class="btn link danger" id="edDelete" data-i18n="sched.delete">Eliminar</button>
+      <button type="button" class="btn link" id="edTimer" data-i18n="sched.startTimer">Iniciar temporizador</button>
+      <button type="submit" class="btn primary" data-i18n="sched.save">Guardar</button>
     </div>
   </form>
 </section>

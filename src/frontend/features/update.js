@@ -3,23 +3,23 @@
 
 import { $ } from '../lib/util.js';
 
-export function initUpdate() {
+export function initUpdate({ t }) {
   tiny.api.on('update-available', ({ latest } = {}) => {
-    $('updateVer').textContent = latest ? latest : '';
+    $('updateMsg').textContent = t('update.available', { ver: latest || '' }).replace(/\s+/g, ' ');
     $('updateBar').hidden = false;
   });
 
   $('updateInstall').addEventListener('click', async () => {
     const btn = $('updateInstall');
     btn.disabled = true;
-    btn.textContent = 'Actualizando…';
+    btn.textContent = t('update.installing');
     $('updateErr').hidden = true;
     try {
       await tiny.app.update.install();   // verifica sha256, sustituye y reinicia
     } catch (e) {
       btn.disabled = false;
-      btn.textContent = 'Reintentar';
-      $('updateErr').textContent = '· No se pudo actualizar: ' + (e?.message || e);
+      btn.textContent = t('update.retry');
+      $('updateErr').textContent = t('update.failed', { msg: e?.message || e });
       $('updateErr').hidden = false;
     }
   });

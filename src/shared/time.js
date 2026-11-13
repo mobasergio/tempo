@@ -1,9 +1,8 @@
 // Utilidades de tiempo compartidas por el backend (txiki.js) y las páginas.
 // Sin Intl en txiki.js: todo el formato se hace a mano.
 
+// Los nombres de los días están en los diccionarios (shared/i18n).
 export const DAY_MIN = 24 * 60;
-export const DAY_SHORT = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-export const DAY_LONG = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 export const pad2 = (n) => String(n).padStart(2, '0');
 

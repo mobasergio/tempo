@@ -5,7 +5,7 @@
 const WIDGET_W = 300;
 const WIDGET_H = 92;
 
-export function createWidget({ app, title, info, onChange }) {
+export function createWidget({ app, title, t, info, onChange }) {
   const w = { on: true, open: false, pos: null, lastSaved: '' };
 
   const state = () => ({ on: w.on, ...info() });
@@ -26,7 +26,7 @@ export function createWidget({ app, title, info, onChange }) {
     const { x, y } = w.pos || await defaultPosition();
     app.win.open('widget', {
       page: 'widget.html',
-      title: `${title} — Ahora`,
+      title: t('widget.windowTitle', { app: title }),
       size: `${WIDGET_W}x${WIDGET_H}`,
       minSize: `${WIDGET_W}x${WIDGET_H}`,
       x, y,

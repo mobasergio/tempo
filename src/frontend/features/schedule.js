@@ -4,7 +4,7 @@
 // cada uno y muestra el actual en la bandeja; aquí solo se dibujan y editan.
 
 import { $, newId } from '../lib/util.js';
-import { DAY_MIN, DAY_SHORT, DAY_LONG, hhmm, parseHHMM, durText, weekNow } from '../../shared/time.js';
+import { DAY_MIN, hhmm, parseHHMM, durText, weekNow } from '../../shared/time.js';
 import { COLORS, DEFAULT_COLOR, colorHex } from '../../shared/colors.js';
 import { layoutDay, isActiveAt, timerSecondsFor } from '../../shared/schedule-core.js';
 
@@ -19,6 +19,10 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * @param deps.startTimer(seconds)  arranca el temporizador (plugin)
  */
 export function initSchedule(ctx, { startTimer }) {
+  const { t } = ctx;
+  const DAY_SHORT = t('days.short');
+  const DAY_LONG = t('days.long');
+  const untitled = (b) => b.title || t('app.untitled');
   let blocks = [];
   let selectedId = null;
   let cursor = null;             // { day, min }: posición marcada con un clic
@@ -80,7 +84,7 @@ export function initSchedule(ctx, { startTimer }) {
 
     const title = document.createElement('div');
     title.className = 'sblock-title';
-    title.textContent = b.title || 'Sin título';
+    title.textContent = untitled(b);
     const time = document.createElement('div');
     time.className = 'sblock-time';
     time.textContent = `${hhmm(b.start)} – ${hhmm(b.end)}`;
@@ -89,7 +93,7 @@ export function initSchedule(ctx, { startTimer }) {
     const bot = document.createElement('div');
     bot.className = 'sblock-handle bot';
     el.append(title, time, top, bot);
-    el.title = `${b.title || 'Sin título'}\n${hhmm(b.start)} – ${hhmm(b.end)}\n${b.days.map((d) => DAY_SHORT[d]).join(' ')}`;
+    el.title = `${untitled(b)}\n${hhmm(b.start)} – ${hhmm(b.end)}\n${b.days.map((d) => DAY_SHORT[d]).join(' ')}`;
     return el;
   }
 
@@ -117,11 +121,11 @@ export function initSchedule(ctx, { startTimer }) {
 
   // Línea de "ahora", día de hoy resaltado y bloque en curso.
   function renderNow() {
-    const t = weekNow();
+    const now = weekNow();
     const heads = $('schedHead').children;
     for (let d = 0; d < 7; d++) {
-      heads[d + 1].classList.toggle('today', d === t.day);
-      cols[d].classList.toggle('today', d === t.day);
+      heads[d + 1].classList.toggle('today', d === now.day);
+      cols[d].classList.toggle('today', d === now.day);
     }
     let line = $('schedNow');
     if (!line) {
@@ -129,12 +133,12 @@ export function initSchedule(ctx, { startTimer }) {
       line.id = 'schedNow';
       line.className = 'sched-now';
     }
-    line.style.top = (t.min / 60) * HOUR_PX + 'px';
-    if (line.parentNode !== cols[t.day]) cols[t.day].append(line);
+    line.style.top = (now.min / 60) * HOUR_PX + 'px';
+    if (line.parentNode !== cols[now.day]) cols[now.day].append(line);
 
     for (const el of document.querySelectorAll('.sblock')) {
       const b = blockById(el.dataset.id);
-      el.classList.toggle('current', !!b && Number(el.dataset.day) === t.day && isActiveAt(b, t));
+      el.classList.toggle('current', !!b && Number(el.dataset.day) === now.day && isActiveAt(b, now));
     }
   }
 
@@ -342,7 +346,8 @@ export function initSchedule(ctx, { startTimer }) {
       sw.className = 'ed-swatch';
       sw.dataset.color = name;
       sw.style.setProperty('--c', hex);
-      sw.setAttribute('aria-label', name);
+      sw.setAttribute('aria-label', t(`color.${name}`));
+      sw.title = t(`color.${name}`);
       sw.addEventListener('click', () => { ed.color = name; paintEditor(); });
       $('edColors').append(sw);
     }
@@ -357,9 +362,9 @@ export function initSchedule(ctx, { startTimer }) {
   }
 
   function editorError(v) {
-    if (!Number.isFinite(v.start) || !Number.isFinite(v.end)) return 'Hora no válida.';
-    if (v.end <= v.start) return 'El fin debe ser posterior al inicio.';
-    if (!v.days.length) return 'Elige al menos un día.';
+    if (!Number.isFinite(v.start) || !Number.isFinite(v.end)) return t('sched.errTime');
+    if (v.end <= v.start) return t('sched.errOrder');
+    if (!v.days.length) return t('sched.errDays');
     return '';
   }
 
@@ -380,7 +385,7 @@ export function initSchedule(ctx, { startTimer }) {
     $('edEnd').value = hhmm(b.end % DAY_MIN);
     ed.days = new Set(b.days);
     ed.color = b.color in COLORS ? b.color : DEFAULT_COLOR;
-    $('edDelete').textContent = isNew ? 'Descartar' : 'Eliminar';
+    $('edDelete').textContent = t(isNew ? 'sched.discard' : 'sched.delete');
     paintEditor();
 
     $('schedEditor').hidden = false;
@@ -516,7 +521,7 @@ export function initSchedule(ctx, { startTimer }) {
 
   let widgetOn = false;
   function paintWidgetBtn() {
-    $('schedWidget').textContent = widgetOn ? 'Ocultar widget' : 'Mostrar widget';
+    $('schedWidget').textContent = t(widgetOn ? 'sched.widgetHide' : 'sched.widgetShow');
   }
   tiny.api.on('widget', (st) => {
     if (st && typeof st.on === 'boolean') { widgetOn = st.on; paintWidgetBtn(); }

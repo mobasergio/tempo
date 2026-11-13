@@ -4,12 +4,12 @@
 import { $ } from '../lib/util.js';
 import { fmtClock } from '../../shared/time.js';
 
-const STATUS_TEXT = { idle: 'Listo', running: 'En marcha', paused: 'En pausa', done: '¡Tiempo terminado!' };
-const MAIN_LABEL = { idle: 'Iniciar', running: 'Pausar', paused: 'Reanudar', done: 'Iniciar' };
+const MAIN_LABEL = { idle: 'timer.start', running: 'timer.pause', paused: 'timer.resume', done: 'timer.start' };
 const RING_LEN = 2 * Math.PI * 110;   // circunferencia del anillo (r = 110)
 const MAX_EDIT_SECONDS = 9999 * 60 + 59;
 
 export function initTimer(ctx) {
+  const { t } = ctx;
   let timerState = { status: 'idle', duration: 0, remaining: 0, lastDuration: 25 * 60 };
 
   function customSeconds() {
@@ -48,7 +48,7 @@ export function initTimer(ctx) {
     const text = fmtClock(shown);
     $('timerDisplay').textContent = text;
     $('timerDisplay').classList.toggle('long', text.length > 5);
-    $('timerStatus').textContent = STATUS_TEXT[status];
+    $('timerStatus').textContent = t(`timer.status.${status}`);
 
     // La duración solo se edita con el temporizador parado; en marcha o en
     // pausa el círculo muestra la cuenta atrás y los presets quedan bloqueados.
@@ -63,7 +63,7 @@ export function initTimer(ctx) {
     $('ringFill').style.strokeDashoffset = (RING_LEN * (1 - p)).toFixed(2);
     $('ring').className = 'ring ' + status;
 
-    $('timerMain').textContent = MAIN_LABEL[status];
+    $('timerMain').textContent = t(MAIN_LABEL[status]);
     $('timerMain').classList.toggle('stop', status === 'running');
     $('timerReset').disabled = status === 'idle';
   }
@@ -79,7 +79,7 @@ export function initTimer(ctx) {
 
   function start(seconds = customSeconds()) {
     if (seconds < 1) {
-      $('timerStatus').textContent = 'Introduce una duración mayor que 0.';
+      $('timerStatus').textContent = t('timer.zero');
       return;
     }
     setCustomInputs(seconds);

@@ -3,6 +3,7 @@
 import { $, newId, save } from '../lib/util.js';
 
 export function initTodo(ctx) {
+  const { t: tr } = ctx;
   let todos = [];   // { id, text, done }
   const persist = () => save('todos', todos, 0);
 
@@ -17,25 +18,25 @@ export function initTodo(ctx) {
       const grip = document.createElement('span');
       grip.className = 'todo-grip';
       grip.textContent = '⋮⋮';
-      grip.title = 'Arrastra para ordenar';
+      grip.title = tr('todo.drag');
       grip.addEventListener('pointerdown', (e) => drag(e, li));
 
       const check = document.createElement('button');
       check.className = 'todo-check';
       check.setAttribute('aria-pressed', t.done);
-      check.setAttribute('aria-label', t.done ? 'Marcar como pendiente' : 'Marcar como hecha');
+      check.setAttribute('aria-label', tr(t.done ? 'todo.markPending' : 'todo.markDone'));
       check.addEventListener('click', () => { t.done = !t.done; persist(); render(); });
 
       const text = document.createElement('span');
       text.className = 'todo-text';
       text.textContent = t.text;
-      text.title = 'Doble clic para editar';
+      text.title = tr('todo.editHint');
       text.addEventListener('dblclick', () => edit(li, t));
 
       const del = document.createElement('button');
       del.className = 'todo-del';
       del.textContent = '×';
-      del.setAttribute('aria-label', 'Borrar tarea');
+      del.setAttribute('aria-label', tr('todo.delete'));
       del.addEventListener('click', () => { todos = todos.filter((x) => x !== t); persist(); render(); });
 
       li.append(grip, check, text, del);
@@ -44,8 +45,8 @@ export function initTodo(ctx) {
     const pending = todos.filter((t) => !t.done).length;
     $('todoEmpty').hidden = todos.length > 0;
     $('todoCount').textContent = !todos.length ? ''
-      : !pending ? 'Todo hecho'
-      : pending === 1 ? '1 pendiente' : `${pending} pendientes`;
+      : !pending ? tr('todo.allDone')
+      : tr.plural('todo.pending', pending);
     $('todoClear').disabled = pending === todos.length;
   }
 
