@@ -3,6 +3,7 @@
 
 import { $ } from '../lib/util.js';
 import { applyTheme } from '../lib/theme.js';
+import { createDialog } from '../lib/dialog.js';
 import { cleanHotkey } from '../../shared/settings.js';
 
 const isMac = tiny.system.isMacOS();
@@ -36,61 +37,32 @@ export function initSettings(ctx, initial) {
   let widgetOn = !!initial.widget;
   let launch = initial.launchAtLogin || 'unsupported';
   let recording = false;
-  let lastFocus = null;
   let hotkeyErr = '';
 
   const scrim = $('settings');
-  const dialog = scrim.querySelector('.settings');
 
   // ── Abrir / cerrar ──
 
-  function open() {
-    lastFocus = document.activeElement;
-    scrim.hidden = false;
-    ctx.modalOpen = true;
-    paint();
-    dialog.focus();
-    // por si cambió desde la bandeja o en el sistema
-    tiny.api.call('getSettings').then((st) => {
-      if (!st) return;
-      s = st.settings;
-      widgetOn = !!st.widget;
-      launch = st.launchAtLogin;
+  const dlg = createDialog(ctx, scrim, {
+    canClose: () => !recording,
+    onOpen() {
       paint();
-    }).catch(() => {});
-  }
-
-  function close() {
-    stopRecording();
-    scrim.hidden = true;
-    ctx.modalOpen = false;
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
-  }
+      // por si cambió desde la bandeja o en el sistema
+      tiny.api.call('getSettings').then((st) => {
+        if (!st) return;
+        s = st.settings;
+        widgetOn = !!st.widget;
+        launch = st.launchAtLogin;
+        paint();
+      }).catch(() => {});
+    },
+    onClose: () => stopRecording(),
+  });
+  const open = dlg.open;
+  const close = dlg.close;
 
   $('settingsBtn').addEventListener('click', open);
   $('settingsClose').addEventListener('click', close);
-  scrim.addEventListener('pointerdown', (e) => { if (e.target === scrim) close(); });
-
-  // Esc cierra; Tab no sale del diálogo.
-  scrim.addEventListener('keydown', (e) => {
-    if (recording) return;
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close();
-    } else if (e.key === 'Tab') {
-      const items = [...dialog.querySelectorAll('button, input')].filter((el) => !el.disabled && el.offsetParent);
-      if (!items.length) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-  });
 
   // ── Pintar ──
 
@@ -215,5 +187,5 @@ export function initSettings(ctx, initial) {
   });
 
   applyTheme(s.theme);
-  return { open, close };
+  return { open, close, isOpen: dlg.isOpen };
 }

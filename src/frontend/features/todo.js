@@ -1,13 +1,63 @@
 // Pestaña Tareas: lista de pendientes ordenable, guardada en tiny.store.
 
 import { $, newId, save } from '../lib/util.js';
+import { toast } from '../lib/toast.js';
+import { announce } from '../lib/dialog.js';
 
 export function initTodo(ctx) {
   const { t: tr } = ctx;
   let todos = [];   // { id, text, done }
   const persist = () => save('todos', todos, 0);
 
+  // Qué parte de qué tarea tiene el foco, para devolvérselo tras repintar.
+  function focusedPart() {
+    const el = document.activeElement;
+    const li = el?.closest?.('.todo-item');
+    if (!li || !$('todoList').contains(li)) return null;
+    const part = ['todo-check', 'todo-text', 'todo-del'].find((c) => el.classList.contains(c)) || 'todo-text';
+    return { id: li.dataset.id, part };
+  }
+
+  function focusItem(id, part = 'todo-text') {
+    const li = id && $('todoList').querySelector(`.todo-item[data-id="${CSS.escape(id)}"]`);
+    if (!li) { $('todoInput').focus(); return; }
+    const el = li.querySelector('.' + part) || li.querySelector('.todo-text');
+    el.focus({ preventScroll: true });
+    li.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Con deshacer: el estado anterior vuelve con el botón del aviso.
+  function removeWithUndo(next, msg) {
+    const prev = todos.slice();
+    todos = next;
+    persist();
+    render();
+    toast(msg, { action: { label: tr('toast.undo'), run: () => { todos = prev; persist(); render(); } } });
+  }
+
+  function deleteTodo(t) {
+    const i = todos.indexOf(t);
+    const after = todos[i + 1] || todos[i - 1];
+    const hadFocus = $('todoList').contains(document.activeElement);
+    removeWithUndo(todos.filter((x) => x !== t), tr('todo.deleted'));
+    if (hadFocus) focusItem(after?.id);
+  }
+
+  // Alt+↑/↓: mueve la tarea un puesto.
+  function moveTodo(t, delta) {
+    const i = todos.indexOf(t);
+    const j = i + delta;
+    if (j < 0 || j >= todos.length) return;
+    todos.splice(i, 1);
+    todos.splice(j, 0, t);
+    persist();
+    render();
+    focusItem(t.id);
+    announce(tr('todo.moved', { n: j + 1, total: todos.length }));
+  }
+
   function render() {
+    const keep = focusedPart();
     const list = $('todoList');
     list.replaceChildren();
     for (const t of todos) {
@@ -19,9 +69,11 @@ export function initTodo(ctx) {
       grip.className = 'todo-grip';
       grip.textContent = '⋮⋮';
       grip.title = tr('todo.drag');
+      grip.setAttribute('aria-hidden', 'true');   // con teclado: Alt+↑/↓
       grip.addEventListener('pointerdown', (e) => drag(e, li));
 
       const check = document.createElement('button');
+      check.type = 'button';
       check.className = 'todo-check';
       check.setAttribute('aria-pressed', t.done);
       check.setAttribute('aria-label', tr(t.done ? 'todo.markPending' : 'todo.markDone'));
@@ -31,13 +83,45 @@ export function initTodo(ctx) {
       text.className = 'todo-text';
       text.textContent = t.text;
       text.title = tr('todo.editHint');
+      text.tabIndex = 0;
+      text.setAttribute('role', 'button');
+      text.setAttribute('aria-roledescription', tr('todo.item'));
+      text.setAttribute('aria-describedby', 'todoItemHelp');
       text.addEventListener('dblclick', () => edit(li, t));
 
       const del = document.createElement('button');
+      del.type = 'button';
       del.className = 'todo-del';
       del.textContent = '×';
       del.setAttribute('aria-label', tr('todo.delete'));
-      del.addEventListener('click', () => { todos = todos.filter((x) => x !== t); persist(); render(); });
+      del.addEventListener('click', () => deleteTodo(t));
+
+      // Teclado sobre la tarea: Intro/F2 edita, Espacio la marca, Supr la
+      // borra y Alt+↑/↓ la mueve.
+      li.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+          e.preventDefault();
+          e.stopPropagation();
+          moveTodo(t, e.key === 'ArrowUp' ? -1 : 1);
+        } else if (e.altKey || e.ctrlKey || e.metaKey) {
+          return;
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          // flechas: tarea anterior / siguiente, en la misma columna
+          e.preventDefault();
+          const sib = e.key === 'ArrowUp' ? li.previousElementSibling : li.nextElementSibling;
+          if (sib) focusItem(sib.dataset.id, focusedPart()?.part);
+        } else if (e.target === text && (e.key === 'Enter' || e.key === 'F2')) {
+          e.preventDefault();
+          edit(li, t);
+        } else if (e.target === text && e.key === ' ') {
+          e.preventDefault();
+          check.click();
+        } else if (e.key === 'Delete') {
+          e.preventDefault();
+          deleteTodo(t);
+        }
+      });
 
       li.append(grip, check, text, del);
       list.appendChild(li);
@@ -48,9 +132,10 @@ export function initTodo(ctx) {
       : !pending ? tr('todo.allDone')
       : tr.plural('todo.pending', pending);
     $('todoClear').disabled = pending === todos.length;
+    if (keep) focusItem(keep.id, keep.part);
   }
 
-  // Doble clic: el texto pasa a ser un campo. Intro o salir guarda (vacío borra), Esc cancela.
+  // Doble clic, Intro o F2: el texto pasa a ser un campo. Intro o salir guarda (vacío borra), Esc cancela.
   function edit(li, t) {
     const input = document.createElement('input');
     input.type = 'text';
@@ -61,20 +146,23 @@ export function initTodo(ctx) {
     input.focus();
     input.select();
     let finished = false;
-    const finish = (commit) => {
+    // refocus: se terminó con el teclado (Intro/Esc) → el foco vuelve a la tarea;
+    // al salir con un clic se queda donde se hizo clic.
+    const finish = (commit, refocus = false) => {
       if (finished) return;
       finished = true;
       if (commit) {
         const text = input.value.trim();
         if (text) t.text = text;
-        else todos = todos.filter((x) => x !== t);
+        else { deleteTodo(t); return; }
         persist();
       }
       render();
+      if (refocus) focusItem(t.id);
     };
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') finish(true);
-      else if (e.key === 'Escape') finish(false);
+      if (e.key === 'Enter') { e.preventDefault(); finish(true, true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false, true); }
     });
     input.addEventListener('blur', () => finish(true));
   }
@@ -169,9 +257,8 @@ export function initTodo(ctx) {
     $('todoInput').focus();
   });
   $('todoClear').addEventListener('click', () => {
-    todos = todos.filter((t) => !t.done);
-    persist();
-    render();
+    const n = todos.filter((t) => t.done).length;
+    removeWithUndo(todos.filter((t) => !t.done), tr.plural('todo.cleared', n));
   });
 
   ctx.registerTab('todo', {});

@@ -2,16 +2,28 @@
 // Un bloque es una sola entidad que aparece en cada uno de sus días (ver
 // shared/schedule-core.js). El backend guarda los bloques, avisa al empezar
 // cada uno y muestra el actual en la bandeja; aquí solo se dibujan y editan.
+//
+// Se maneja igual con ratón que con teclado: arrastrar crea / mueve /
+// redimensiona; las flechas recorren bloques (o un cursor en los huecos),
+// Alt+flechas los mueven e Intro crea o edita. El editor se acopla como
+// panel lateral en ventanas anchas y flota junto al bloque en las estrechas.
 
 import { $, newId } from '../lib/util.js';
 import { createHistory } from '../lib/history.js';
 import { toast } from '../lib/toast.js';
+import { trapTab, announce } from '../lib/dialog.js';
 import { DAY_MIN, hhmm, parseHHMM, durText, weekNow } from '../../shared/time.js';
 import { COLORS, DEFAULT_COLOR, colorHex } from '../../shared/colors.js';
 import { layoutDay, isActiveAt, timerSecondsFor } from '../../shared/schedule-core.js';
 
 const HOUR_PX = 48;
 const SNAP = 15;                 // minutos
+const DOCK_MIN = 1100;           // ancho del panel desde el que el editor se acopla
+const NUDGE_MERGE_MS = 1000;     // pulsaciones seguidas de Alt+flecha = un solo deshacer
+const ARROWS = {
+  ArrowUp: { dx: 0, dy: -1 }, ArrowDown: { dx: 0, dy: 1 },
+  ArrowLeft: { dx: -1, dy: 0 }, ArrowRight: { dx: 1, dy: 0 },
+};
 
 const snap = (min) => Math.round(min / SNAP) * SNAP;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -28,20 +40,31 @@ export function initSchedule(ctx, { startTimer }) {
   let blocks = [];
   let selectedId = null;
   let selectedDay = 0;           // columna donde se seleccionó (bloques de varios días)
-  let cursor = null;             // { day, min }: posición marcada con un clic
-  let editing = null;            // { id }
+  let cursor = null;             // { day, min }: posición marcada con un clic o las flechas
+  let editing = null;            // { id, day, isNew }
   let clip = null;               // bloque copiado (Ctrl+C), sin id
   const history = createHistory({ limit: 50 });
+  let lastNudge = { key: '', at: 0 };
   let dragging = false;
+  let dismissing = false;        // el clic que cierra el editor no marca el cursor
   let saveTimer = null;
   let savesInFlight = 0;
   let scrolledOnce = false;
   const cols = [];
+  const panel = $('panel-sched');
+  const grid = $('schedGrid');
+  const body = $('schedBody');
+  const box = $('schedEditor');
 
   const isShown = () => ctx.state.get().activeTab === 'sched';
+  const isDocked = () => panel.classList.contains('dock');
   const blockById = (id) => blocks.find((b) => b.id === id);
   // Llamar justo antes de cada cambio que se pueda deshacer.
-  const remember = () => history.record(blocks);
+  const remember = () => { lastNudge = { key: '', at: 0 }; history.record(blocks); };
+  const rangeText = (start, end) => `${hhmm(start)} – ${hhmm(end)}`;
+  const blockLabel = (b) => t('sched.blockLabel', {
+    title: untitled(b), start: hhmm(b.start), end: hhmm(b.end), days: b.days.map((d) => DAY_LONG[d]).join(', '),
+  });
 
   // ───────────────────────── Estructura ─────────────────────────
 
@@ -52,7 +75,14 @@ export function initSchedule(ctx, { startTimer }) {
       const h = document.createElement('div');
       h.className = 'sched-day';
       h.title = DAY_LONG[d];
-      h.textContent = DAY_LONG[d];
+      // nombre completo o abreviado según el ancho (container query en el CSS)
+      const long = document.createElement('span');
+      long.className = 'd-long';
+      long.textContent = DAY_LONG[d];
+      const short = document.createElement('span');
+      short.className = 'd-short';
+      short.textContent = DAY_LONG[d].slice(0, 3);
+      h.append(long, short);
       head.append(h);
     }
 
@@ -69,10 +99,10 @@ export function initSchedule(ctx, { startTimer }) {
       const c = document.createElement('div');
       c.className = 'sched-col';
       c.dataset.day = d;
-      $('schedGrid').append(c);
+      grid.append(c);
       cols.push(c);
     }
-    $('schedGrid').style.height = 24 * HOUR_PX + 'px';
+    grid.style.height = 24 * HOUR_PX + 'px';
   }
 
   // ───────────────────────── Dibujo ─────────────────────────
@@ -82,6 +112,9 @@ export function initSchedule(ctx, { startTimer }) {
     el.className = 'sblock';
     el.dataset.id = b.id;
     el.dataset.day = day;
+    el.tabIndex = -1;                       // se enfoca desde el teclado (flechas)
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', blockLabel(b));
     el.style.setProperty('--c', colorHex(b.color));
     placeEl(el, b.start, b.end);
     el.style.left = `calc(${(lane / lanes) * 100}% + 2px)`;
@@ -94,13 +127,13 @@ export function initSchedule(ctx, { startTimer }) {
     title.textContent = untitled(b);
     const time = document.createElement('div');
     time.className = 'sblock-time';
-    time.textContent = `${hhmm(b.start)} – ${hhmm(b.end)}`;
+    time.textContent = rangeText(b.start, b.end);
     const top = document.createElement('div');
     top.className = 'sblock-handle top';
     const bot = document.createElement('div');
     bot.className = 'sblock-handle bot';
     el.append(title, time, top, bot);
-    el.title = `${untitled(b)}\n${hhmm(b.start)} – ${hhmm(b.end)}\n${b.days.map((d) => DAY_SHORT[d]).join(' ')}`;
+    el.title = `${untitled(b)}\n${rangeText(b.start, b.end)}\n${b.days.map((d) => DAY_SHORT[d]).join(' ')}`;
     return el;
   }
 
@@ -110,6 +143,7 @@ export function initSchedule(ctx, { startTimer }) {
   }
 
   function render() {
+    const hadFocus = grid.contains(document.activeElement) && document.activeElement !== grid;
     for (const c of cols) c.replaceChildren();
     for (let d = 0; d < 7; d++) {
       for (const { b, lane, lanes } of layoutDay(blocks, d)) cols[d].append(blockEl(b, d, lane, lanes));
@@ -123,7 +157,10 @@ export function initSchedule(ctx, { startTimer }) {
       c.append(label);
       cols[cursor.day].append(c);
     }
+    $('schedHint').hidden = blocks.length > 0;
     renderNow();
+    // el foco estaba en un bloque que se ha vuelto a crear: se recupera
+    if (hadFocus) focusSelection();
   }
 
   // Línea de "ahora", día de hoy resaltado y bloque en curso.
@@ -149,16 +186,52 @@ export function initSchedule(ctx, { startTimer }) {
     }
   }
 
+  function selectedEl() {
+    if (!selectedId) return null;
+    const id = CSS.escape(selectedId);
+    return document.querySelector(`.sblock[data-id="${id}"][data-day="${selectedDay}"]`)
+      || document.querySelector(`.sblock[data-id="${id}"]`);
+  }
+
+  // Enfoca el bloque seleccionado (o la rejilla) y lo hace visible.
+  function focusSelection() {
+    const el = selectedEl();
+    if (el) {
+      el.focus({ preventScroll: true });
+      el.scrollIntoView({ block: 'nearest' });
+    } else {
+      grid.focus({ preventScroll: true });
+      if (cursor) cols[cursor.day].querySelector('.sched-cursor')?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function scrollToNow({ smooth = false } = {}) {
+    const top = Math.max(0, ((weekNow().min - 60) / 60) * HOUR_PX);
+    body.scrollTo({ top, behavior: smooth ? 'smooth' : 'auto' });
+  }
+
   function onShow() {
+    updateDock();
     render();
     if (!scrolledOnce) {
       scrolledOnce = true;
       // espera al cambio de tamaño de la ventana antes de desplazar
-      requestAnimationFrame(() => {
-        $('schedBody').scrollTop = Math.max(0, ((weekNow().min - 60) / 60) * HOUR_PX);
-      });
+      requestAnimationFrame(() => scrollToNow());
     }
   }
+
+  // ───────────────────── Panel lateral / flotante ─────────────────────
+
+  function updateDock() {
+    const dock = panel.clientWidth >= DOCK_MIN;
+    panel.classList.toggle('dock', dock);
+    document.body.classList.toggle('sched-docked', dock && isShown());
+    placeEditor();
+  }
+  new ResizeObserver(() => { if (isShown()) updateDock(); }).observe(panel);
+  ctx.state.subscribe((s, prev) => {
+    if (s.activeTab !== prev.activeTab) document.body.classList.toggle('sched-docked', isDocked() && isShown());
+  });
 
   // ───────────────────────── Guardado ─────────────────────────
 
@@ -200,12 +273,16 @@ export function initSchedule(ctx, { startTimer }) {
     return clientX < cols[0].getBoundingClientRect().left ? cols[0] : cols[6];
   }
 
-  // Cerca de los bordes, desplaza el horario.
+  // Cerca de los bordes, desplaza el horario; más deprisa cuanto más cerca.
   function autoScroll(clientY) {
-    const body = $('schedBody');
     const r = body.getBoundingClientRect();
-    if (clientY < r.top + 50) body.scrollTop -= 10;
-    else if (clientY > r.bottom - 24) body.scrollTop += 10;
+    const TOP = 56;              // incluye la cabecera fija de los días
+    const BOT = 40;
+    const MAX = 18;
+    const up = clientY - r.top;
+    const down = r.bottom - clientY;
+    if (up < TOP) body.scrollTop -= Math.ceil(((TOP - up) / TOP) * MAX);
+    else if (down < BOT) body.scrollTop += Math.ceil(((BOT - down) / BOT) * MAX);
   }
 
   // Sigue un gesto de arrastre. Los pointermove se agrupan en un frame
@@ -221,7 +298,6 @@ export function initSchedule(ctx, { startTimer }) {
     const frame = () => {
       raf = 0;
       if (!last) return;
-      const body = $('schedBody');
       const before = body.scrollTop;
       autoScroll(last.clientY);
       onMove(last);
@@ -250,20 +326,26 @@ export function initSchedule(ctx, { startTimer }) {
     document.addEventListener('pointercancel', end);
   }
 
-  $('schedGrid').addEventListener('pointerdown', (e) => {
+  grid.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     const col = e.target.closest('.sched-col');
     if (!col) return;
     e.preventDefault();
+    // preventDefault evita el foco nativo: se da a mano para que el teclado
+    // siga donde se ha hecho clic
+    grid.focus({ preventScroll: true });
+    grid.dataset.pointer = '';        // foco por ratón: sin anillo de teclado
     const blockNode = e.target.closest('.sblock');
     if (blockNode) dragBlock(e, blockNode);
     else dragCreate(e, col);
   });
 
-  // Arrastrar en vacío crea un bloque; un clic solo marca la posición.
+  // Arrastrar en vacío crea un bloque y abre el editor; un clic solo marca la posición.
   function dragCreate(e, col) {
     const day = Number(col.dataset.day);
     const anchor = Math.floor(minuteAt(col, e.clientY) / SNAP) * SNAP;
+    const dismiss = dismissing;
+    dismissing = false;
     let range = [anchor, anchor + SNAP];
     const ghost = document.createElement('div');
     ghost.className = 'sblock ghost';
@@ -271,30 +353,37 @@ export function initSchedule(ctx, { startTimer }) {
     ghost.style.width = 'calc(100% - 4px)';
 
     track(e, (ev) => {
-      if (cursor) { cursor = null; $('schedGrid').querySelector('.sched-cursor')?.remove(); }
+      if (cursor) { cursor = null; grid.querySelector('.sched-cursor')?.remove(); }
       const m = snap(minuteAt(col, ev.clientY));
       range = m > anchor ? [anchor, m] : [Math.min(m, anchor), anchor + SNAP];
       if (!ghost.parentNode) col.append(ghost);
       placeEl(ghost, range[0], range[1]);
-      ghost.textContent = `${hhmm(range[0])} – ${hhmm(range[1])}`;
+      ghost.textContent = rangeText(range[0], range[1]);
     }, (ev, moved) => {
       ghost.remove();
       if (!moved) {
-        cursor = { day, min: Math.min(anchor, DAY_MIN - SNAP) };
+        // el clic que solo cerraba el editor no deja un cursor de recuerdo
+        cursor = dismiss ? null : { day, min: Math.min(anchor, DAY_MIN - SNAP) };
         selectedId = null;
         render();
         return;
       }
-      const b = { id: newId(), title: '', start: range[0], end: range[1], days: [day], color: DEFAULT_COLOR };
-      // Queda seleccionado, sin abrir el editor: Supr lo borra, y Enter,
-      // un clic o empezar a escribir lo nombran.
-      remember();
-      blocks.push(b);
-      selectedId = b.id;
-      selectedDay = day;
-      render();
-      saveBlocks();
+      createBlock(day, range[0], range[1]);
     });
+  }
+
+  // Crea un bloque, lo selecciona y abre el editor con el título enfocado.
+  function createBlock(day, start, end) {
+    const b = { id: newId(), title: '', start, end, days: [day], color: DEFAULT_COLOR };
+    remember();
+    blocks.push(b);
+    selectedId = b.id;
+    selectedDay = day;
+    cursor = null;
+    render();
+    saveBlocks();
+    announce(t('sched.created', { start: hhmm(start), end: hhmm(end), day: DAY_LONG[day] }));
+    openEditor(b.id, day, { isNew: true });
   }
 
   // Mover (cuerpo) o redimensionar (bordes). En vertical cambia la hora en
@@ -353,7 +442,7 @@ export function initSchedule(ctx, { startTimer }) {
         next = { ...next, end: clamp(snap(m), b.start + SNAP, DAY_MIN) };
       }
 
-      const label = `${hhmm(next.start)} – ${hhmm(next.end)}`;
+      const label = rangeText(next.start, next.end);
       const dy = ((rawStart - b.start) / 60) * HOUR_PX;
       const dx = single ? clamp(ev.clientX - startX, dxMin, dxMax) : 0;
       els.forEach((el, i) => {
@@ -388,6 +477,95 @@ export function initSchedule(ctx, { startTimer }) {
     });
   }
 
+  // ───────────────────────── Teclado ─────────────────────────
+
+  // Al volver al teclado reaparece el anillo de foco (ver data-pointer).
+  document.addEventListener('keydown', () => { delete grid.dataset.pointer; }, true);
+
+  function select(id, day) {
+    selectedId = id;
+    selectedDay = day;
+    cursor = null;
+    render();
+    focusSelection();
+  }
+
+  // Flechas con un bloque seleccionado: ↑/↓ el anterior / siguiente del mismo
+  // día; ←/→ el más cercano en hora del día con bloques más próximo.
+  function moveSelection({ dx, dy }) {
+    const cur = blockById(selectedId);
+    if (!cur) return;
+    const dayBlocks = (d) => layoutDay(blocks, d).map((x) => x.b)
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+    if (dy) {
+      const list = dayBlocks(selectedDay);
+      const next = list[list.indexOf(cur) + dy];
+      if (next) select(next.id, selectedDay);
+      return;
+    }
+    for (let d = selectedDay + dx; d >= 0 && d < 7; d += dx) {
+      const list = dayBlocks(d);
+      if (!list.length) continue;
+      const near = list.reduce((a, b) => (Math.abs(b.start - cur.start) < Math.abs(a.start - cur.start) ? b : a));
+      select(near.id, d);
+      return;
+    }
+  }
+
+  // Flechas sin selección: un cursor recorre los huecos (15 min / un día).
+  function moveCursor({ dx, dy }) {
+    if (!cursor) {
+      const now = weekNow();
+      cursor = { day: now.day, min: clamp(Math.floor(now.min / SNAP) * SNAP, 0, DAY_MIN - SNAP) };
+    } else {
+      cursor = {
+        day: clamp(cursor.day + dx, 0, 6),
+        min: clamp(cursor.min + dy * SNAP, 0, DAY_MIN - SNAP),
+      };
+    }
+    render();
+    focusSelection();
+    // sobre un bloque se anuncia cuál es (Intro lo abre)
+    const hit = blockAtCursor();
+    const where = `${DAY_LONG[cursor.day]} ${hhmm(cursor.min)}`;
+    announce(hit ? `${where} · ${blockLabel(hit)}` : where);
+  }
+
+  const blockAtCursor = () => cursor
+    && layoutDay(blocks, cursor.day).map((x) => x.b).find((b) => b.start <= cursor.min && cursor.min < b.end);
+
+  // Alt+flechas: mueve el bloque 15 min (↑/↓) o de día (←/→, solo si es de un
+  // día). Con Mayús, ↑/↓ cambian la hora de fin.
+  function nudge({ dx, dy }, resize) {
+    const b = blockById(selectedId);
+    if (!b) return;
+    let { start, end, days } = b;
+    if (resize) {
+      if (!dy) return;
+      end = clamp(end + dy * SNAP, start + SNAP, DAY_MIN);
+    } else if (dy) {
+      const dur = end - start;
+      start = clamp(start + dy * SNAP, 0, DAY_MIN - dur);
+      end = start + dur;
+    } else {
+      if (days.length !== 1) return;
+      days = [clamp(days[0] + dx, 0, 6)];
+    }
+    if (start === b.start && end === b.end && days[0] === b.days[0]) return;
+
+    const key = selectedId + (resize ? ':r' : ':m');
+    const now = Date.now();
+    if (lastNudge.key !== key || now - lastNudge.at > NUDGE_MERGE_MS) remember();
+    lastNudge = { key, at: now };
+
+    Object.assign(b, { start, end, days });
+    if (days.length === 1) selectedDay = days[0];
+    render();
+    focusSelection();
+    saveBlocks();
+    announce(blockLabel(b));
+  }
+
   // ───────────────────────── Editor ─────────────────────────
 
   const ed = { days: new Set(), color: DEFAULT_COLOR };
@@ -398,6 +576,7 @@ export function initSchedule(ctx, { startTimer }) {
       btn.type = 'button';
       btn.textContent = DAY_SHORT[d];
       btn.title = DAY_LONG[d];
+      btn.setAttribute('aria-label', DAY_LONG[d]);
       btn.dataset.day = d;
       btn.addEventListener('click', () => {
         if (ed.days.has(d)) ed.days.delete(d);
@@ -433,26 +612,40 @@ export function initSchedule(ctx, { startTimer }) {
     return { title: $('edTitle').value.trim(), start, end, days: [...ed.days].sort((a, b) => a - b), color: ed.color };
   }
 
+  /** '' si es válido; si no, { field: 'time' | 'days', msg }. */
   function editorError(v) {
-    if (!Number.isFinite(v.start) || !Number.isFinite(v.end)) return t('sched.errTime');
-    if (v.end <= v.start) return t('sched.errOrder');
-    if (!v.days.length) return t('sched.errDays');
+    if (!Number.isFinite(v.start) || !Number.isFinite(v.end)) return { field: 'time', msg: t('sched.errTime') };
+    if (v.end <= v.start) return { field: 'time', msg: t('sched.errOrder') };
+    if (!v.days.length) return { field: 'days', msg: t('sched.errDays') };
     return '';
   }
 
+  function showError(err) {
+    const msg = err ? err.msg : '';
+    if ($('edErr').textContent !== msg) $('edErr').textContent = msg;   // role=alert: solo si cambia
+    $('edErr').hidden = !err;
+    for (const id of ['edStart', 'edEnd']) $(id).setAttribute('aria-invalid', err?.field === 'time');
+    $('edDays').setAttribute('aria-invalid', err?.field === 'days');
+  }
+
+  // Se valida mientras se edita, salvo "hora no válida": un campo de hora a
+  // medio escribir está vacío y el aviso saltaría a cada tecla.
   function paintEditor() {
     for (const btn of $('edDays').children) btn.setAttribute('aria-pressed', ed.days.has(Number(btn.dataset.day)));
     for (const sw of $('edColors').children) sw.setAttribute('aria-pressed', sw.dataset.color === ed.color);
     const v = readEditor();
     $('edDur').textContent = Number.isFinite(v.start) && Number.isFinite(v.end) && v.end > v.start ? durText(v.end - v.start) : '';
-    $('edErr').hidden = true;
+    const err = editorError(v);
+    showError(err && err.msg !== t('sched.errTime') ? err : '');
+    box.style.setProperty('--c', colorHex(ed.color));
   }
 
   // seed: tecla con la que se empezó a escribir sobre el bloque seleccionado.
-  function openEditor(id, day, { seed } = {}) {
+  // isNew: recién creado; cancelar lo descarta (era un arrastre de prueba).
+  function openEditor(id, day, { seed, isNew = false } = {}) {
     const b = blockById(id);
     if (!b) return;
-    editing = { id };
+    editing = { id, day, isNew };
     $('edTitle').value = seed ?? b.title;
     $('edStart').value = hhmm(b.start);
     $('edEnd').value = hhmm(b.end % DAY_MIN);
@@ -460,35 +653,52 @@ export function initSchedule(ctx, { startTimer }) {
     ed.color = b.color in COLORS ? b.color : DEFAULT_COLOR;
     paintEditor();
 
-    $('schedEditor').hidden = false;
-    positionEditor(id, day);
+    box.hidden = false;
+    panel.classList.add('editing');
+    placeEditor();
     const title = $('edTitle');
-    title.focus();
+    title.focus({ preventScroll: true });
     if (seed == null) title.select();
     else title.setSelectionRange(title.value.length, title.value.length);
   }
 
-  // Junto al bloque: a la derecha si cabe, si no a la izquierda.
-  function positionEditor(id, day) {
-    const box = $('schedEditor');
-    const panel = $('panel-sched').getBoundingClientRect();
-    const el = document.querySelector(`.sblock[data-id="${CSS.escape(id)}"][data-day="${day}"]`)
-      || document.querySelector(`.sblock[data-id="${CSS.escape(id)}"]`);
+  // Flotante: junto al bloque, a la derecha si cabe, si no a la izquierda, y
+  // siempre dentro del horario. Acoplado: lo coloca el CSS.
+  function placeEditor() {
+    if (!editing || box.hidden) return;
+    if (isDocked()) {
+      box.style.left = box.style.top = '';
+      return;
+    }
+    const p = panel.getBoundingClientRect();
+    const view = body.getBoundingClientRect();
+    const id = CSS.escape(editing.id);
+    const el = document.querySelector(`.sblock[data-id="${id}"][data-day="${editing.day}"]`)
+      || document.querySelector(`.sblock[data-id="${id}"]`);
     if (!el) return;
     const r = el.getBoundingClientRect();
     const w = box.offsetWidth;
     const h = box.offsetHeight;
     let x = r.right + 8;
-    if (x + w > panel.right - 8) x = r.left - w - 8;
-    if (x < panel.left + 8) x = panel.left + 8;
-    const y = clamp(r.top, panel.top + 8, panel.bottom - h - 8);
-    box.style.left = x - panel.left + 'px';
-    box.style.top = y - panel.top + 'px';
+    if (x + w > p.right - 8) x = r.left - w - 8;
+    if (x < p.left + 8) x = p.left + 8;
+    const y = clamp(r.top, Math.max(p.top, view.top) + 8, Math.min(p.bottom, view.bottom) - h - 8);
+    box.style.left = Math.round(x - p.left) + 'px';
+    box.style.top = Math.round(Math.max(8, y - p.top)) + 'px';
   }
+  let placeRaf = 0;
+  body.addEventListener('scroll', () => {
+    if (!editing || isDocked() || placeRaf) return;
+    placeRaf = requestAnimationFrame(() => { placeRaf = 0; placeEditor(); });
+  }, { passive: true });
 
+  // Cierra el editor; devuelve si tenía el foco (para devolverlo al bloque).
   function closeEditor() {
+    const hadFocus = box.contains(document.activeElement);
     editing = null;
-    $('schedEditor').hidden = true;
+    box.hidden = true;
+    panel.classList.remove('editing');
+    return hadFocus;
   }
 
   // Guarda lo editado; devuelve false si no es válido.
@@ -499,37 +709,52 @@ export function initSchedule(ctx, { startTimer }) {
     const v = readEditor();
     const err = editorError(v);
     if (err) {
-      $('edErr').textContent = err;
-      $('edErr').hidden = false;
+      showError(err);
+      (err.field === 'days' ? $('edDays').firstElementChild : $('edStart')).focus();
       return false;
     }
     const same = v.title === b.title && v.start === b.start && v.end === b.end
       && v.color === b.color && v.days.join() === b.days.join();
-    if (!same) {
-      remember();
-      Object.assign(b, v);
-    }
-    closeEditor();
+    // un bloque nuevo ya guardó su instantánea al crearse: crear y nombrar = un deshacer
+    if (!same && !editing.isNew) remember();
+    if (!same) Object.assign(b, v);
+    if (!b.days.includes(selectedDay)) selectedDay = b.days[0];
+    const refocus = closeEditor();
     render();
+    if (refocus) focusSelection();
     saveBlocks();
     return true;
   }
 
+  // Esc: descarta los cambios. Si el bloque era nuevo, descarta el bloque.
   function cancelEditor() {
     if (!editing) return;
-    closeEditor();
+    const { id, isNew } = editing;
+    const refocus = closeEditor();
+    const b = blockById(id);
+    if (isNew && b) {
+      blocks = blocks.filter((x) => x !== b);
+      history.drop();
+      cursor = { day: b.days[0], min: b.start };
+      selectedId = null;
+      saveBlocks();
+      announce(t('sched.discarded'));
+    }
     render();
+    if (refocus) focusSelection();
   }
 
   function deleteBlock(id) {
     if (!blockById(id)) return;
+    const refocus = box.contains(document.activeElement) || grid.contains(document.activeElement);
     remember();
     blocks = blocks.filter((b) => b.id !== id);
     if (selectedId === id) selectedId = null;
     if (editing && editing.id === id) closeEditor();
     render();
+    if (refocus) focusSelection();
     saveBlocks();
-    toast(t('toast.blockDeleted'), { action: { label: t('toast.undo'), run: () => undo() } });
+    toast(t('toast.blockDeleted'), { action: { label: t('toast.undo'), keys: 'Control+Z', run: () => undo() } });
   }
 
   // ─────────────────── Deshacer, copiar y pegar ───────────────────
@@ -587,7 +812,9 @@ export function initSchedule(ctx, { startTimer }) {
     selectedDay = days[0];
     cursor = null;
     render();
+    focusSelection();
     saveBlocks();
+    announce(blockLabel(b));
     return true;
   }
 
@@ -600,15 +827,19 @@ export function initSchedule(ctx, { startTimer }) {
     return false;
   }
 
-  $('schedEditor').addEventListener('submit', (e) => {
+  box.addEventListener('submit', (e) => {
     e.preventDefault();
     commitEditor();
   });
-  $('schedEditor').addEventListener('keydown', (e) => {
+  box.addEventListener('keydown', (e) => {
     const el = e.target;
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       cancelEditor();
+    } else if (e.key === 'Tab') {
+      // flotante: el foco no se escapa al horario de debajo
+      if (!isDocked()) trapTab(e, box);
     } else if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && editing) {
       // Supr borra el bloque salvo que en el título quede algo que borrar
       // (texto seleccionado o el cursor antes del final). Las horas, normal.
@@ -617,6 +848,12 @@ export function initSchedule(ctx, { startTimer }) {
       e.preventDefault();
       deleteBlock(editing.id);
     }
+  });
+  // ×: guarda lo hecho, salvo un bloque recién creado y sin nombre (se descarta).
+  $('edClose').addEventListener('click', () => {
+    if (!editing) return;
+    if (editing.isNew && !$('edTitle').value.trim()) cancelEditor();
+    else if (!commitEditor()) cancelEditor();
   });
   $('edDelete').addEventListener('click', () => {
     if (!editing) return;
@@ -630,23 +867,25 @@ export function initSchedule(ctx, { startTimer }) {
     if (b) startTimer(timerSecondsFor(b, weekNow()));   // en curso: lo que queda
   });
 
-  // Clic fuera del editor: guarda (o descarta si no es válido). Si el clic cae
-  // en un hueco vacío solo cierra; sobre otro bloque, además lo abre.
+  // Clic fuera del editor: guarda (o descarta si no es válido). Sobre otro
+  // bloque, además lo abre; en un hueco, el mismo gesto puede crear otro.
   document.addEventListener('pointerdown', (e) => {
-    if (!editing || $('schedEditor').contains(e.target)) return;
+    if (!editing || box.contains(e.target)) return;
     const node = e.target.closest('.sblock');
-    const inGrid = !!e.target.closest('.sched-col');
     const day = node ? Number(node.dataset.day) : -1;
     if (!commitEditor()) cancelEditor();
-    // el render ha sustituido los nodos: no se deja seguir el gesto original
-    if (inGrid) e.stopPropagation();
-    if (node && blockById(node.dataset.id)) {
-      selectedId = node.dataset.id;
-      selectedDay = day;
-      render();
-      openEditor(selectedId, day);
+    if (node) {
+      // el render ha sustituido los nodos: no se deja seguir el gesto original
+      e.stopPropagation();
+      if (blockById(node.dataset.id)) {
+        selectedId = node.dataset.id;
+        selectedDay = day;
+        render();
+        openEditor(selectedId, day);
+      }
     } else {
       selectedId = null;
+      if (e.target.closest('.sched-col')) dismissing = true;
       render();
     }
   }, true);
@@ -656,10 +895,25 @@ export function initSchedule(ctx, { startTimer }) {
     if (editing) return;
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
     if (selectedId && !blockById(selectedId)) selectedId = null;
-    if (plain && selectedId && e.key === 'Enter') {
+
+    const arrow = ARROWS[e.key];
+    if (arrow) {
       e.preventDefault();
-      openEditor(selectedId, selectedDay);
-    } else if (plain && selectedId && e.key.length === 1 && e.key !== ' ') {
+      if (selectedId && e.altKey) nudge(arrow, e.shiftKey);
+      else if (selectedId && plain && !e.shiftKey) moveSelection(arrow);
+      else if (!selectedId && plain) moveCursor(arrow);
+      return;
+    }
+    if (!plain) return;
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const hit = !selectedId && blockAtCursor();
+      if (selectedId) openEditor(selectedId, selectedDay);
+      else if (hit) { select(hit.id, cursor.day); openEditor(hit.id, selectedDay); }
+      else if (cursor) createBlock(cursor.day, cursor.min, Math.min(DAY_MIN, cursor.min + 60));
+      else moveCursor({ dx: 0, dy: 0 });   // sin nada marcado: cursor en "ahora"
+    } else if (selectedId && e.key.length === 1 && e.key !== ' ' && e.key !== '?') {
       // empezar a escribir sobre el bloque seleccionado = ponerle nombre
       e.preventDefault();
       openEditor(selectedId, selectedDay, { seed: e.key });
@@ -667,9 +921,12 @@ export function initSchedule(ctx, { startTimer }) {
       e.preventDefault();
       deleteBlock(selectedId);
     } else if (e.key === 'Escape' && (selectedId || cursor)) {
+      // deseleccionar deja el cursor donde estaba el bloque: el teclado no pierde el sitio
+      const b = blockById(selectedId);
+      cursor = b && !cursor ? { day: selectedDay, min: b.start } : null;
       selectedId = null;
-      cursor = null;
       render();
+      focusSelection();
     }
   }
 
@@ -678,6 +935,8 @@ export function initSchedule(ctx, { startTimer }) {
     if (s.plugins !== prev.plugins) $('edTimer').hidden = !s.plugins.timer;
   });
   $('edTimer').hidden = !ctx.state.get().plugins.timer;
+
+  $('schedNowBtn').addEventListener('click', () => scrollToNow({ smooth: true }));
 
   // ───────────────────────── Widget ─────────────────────────
 

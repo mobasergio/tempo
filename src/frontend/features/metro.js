@@ -41,6 +41,7 @@ export function initMetro(ctx) {
     box.classList.toggle('many', n > 8);
     for (let i = 0; i < n; i++) {
       const d = document.createElement('button');
+      d.type = 'button';
       const accented = settings.accents.includes(i);
       d.className = 'dot' + (accented ? ' accent' : '');
       d.setAttribute('aria-pressed', accented);
@@ -95,8 +96,7 @@ export function initMetro(ctx) {
     const i = METERS.indexOf(m);
     $('meterNum').textContent = num;
     $('meterDen').textContent = den;
-    $('meter').setAttribute('aria-valuenow', i);
-    $('meter').setAttribute('aria-valuetext', m);
+    $('meter').setAttribute('aria-label', `${t('metro.meter')} ${m}`);
     $('meterPrev').disabled = i === 0;
     $('meterNext').disabled = i === METERS.length - 1;
     $('bpmNote').textContent = den === '8' ? t('metro.eighth') : '';
@@ -192,7 +192,20 @@ export function initMetro(ctx) {
     e.preventDefault();
     setBpm(settings.bpm + (e.deltaY > 0 ? 1 : -1));
   }, { passive: false });
-  // Compás: flechas, rueda (arriba = siguiente) y ←/→ con el control enfocado.
+  // Teclado sobre la escala (slider ARIA): ↑/↓ ±1, RePág/AvPág ±10,
+  // Inicio/Fin a los extremos. Se atiende aquí y no llega al atajo global.
+  $('scale').addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const step = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+    let next = step != null ? settings.bpm + step
+      : e.key === 'Home' ? BPM_MIN : e.key === 'End' ? BPM_MAX : null;
+    if (next == null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setBpm(next);
+  });
+
+  // Compás: flechas, rueda (arriba = siguiente) y ←/→ o ↑/↓ con el foco en el grupo.
   $('meterPrev').addEventListener('click', () => stepMeter(-1));
   $('meterNext').addEventListener('click', () => stepMeter(1));
   $('meter').addEventListener('wheel', (e) => {
@@ -200,10 +213,13 @@ export function initMetro(ctx) {
     stepMeter(e.deltaY < 0 ? 1 : -1);
   }, { passive: false });
   $('meter').addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      stepMeter(e.key === 'ArrowRight' ? 1 : -1);
-    }
+    const d = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[e.key];
+    if (!d || e.altKey || e.ctrlKey || e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stepMeter(d);
+    // si la flecha deshabilitada tenía el foco, que no se pierda
+    if (document.activeElement?.disabled) $(d < 0 ? 'meterNext' : 'meterPrev').focus();
   });
 
   $('volRange').addEventListener('input', (e) => setVolume(e.target.value / 100));
@@ -213,6 +229,10 @@ export function initMetro(ctx) {
     setVolume(settings.volume + (e.deltaY < 0 ? 0.05 : -0.05));
   }, { passive: false });
   $('metroToggle').addEventListener('click', toggle);
+  // Un botón deshabilitado pierde el foco: se pasa a la otra flecha.
+  for (const [id, other] of [['meterPrev', 'meterNext'], ['meterNext', 'meterPrev']]) {
+    $(id).addEventListener('click', () => { if ($(id).disabled) $(other).focus(); });
+  }
 
   // Crea/reanuda el AudioContext en el primer gesto del usuario.
   for (const ev of ['pointerdown', 'keydown']) {
@@ -222,9 +242,14 @@ export function initMetro(ctx) {
   ctx.registerTab('metro', {
     onKey(e) {
       if (e.code === 'Space') toggle();
+      // con el volumen enfocado, las flechas son suyas
+      else if (e.altKey || e.target.type === 'range') return;
       else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         e.preventDefault();          // evita que un deslizador enfocado se mueva además
         setBpm(settings.bpm + (e.key === 'ArrowUp' ? 1 : -1));
+      } else if (e.key === 'PageUp' || e.key === 'PageDown') {
+        e.preventDefault();
+        setBpm(settings.bpm + (e.key === 'PageUp' ? 10 : -10));
       }
     },
   });

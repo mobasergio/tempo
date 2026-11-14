@@ -22,6 +22,8 @@ export function createHistory({ limit = 50 } = {}) {
       past.push(copy(current));
       return future.pop();
     },
+    /** Olvida el último record() sin restaurarlo (un cambio que se ha descartado). */
+    drop() { past.pop(); },
     canUndo: () => past.length > 0,
     canRedo: () => future.length > 0,
     clear() { past = []; future = []; },

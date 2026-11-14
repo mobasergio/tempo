@@ -39,3 +39,14 @@ test('límite de pasos', () => {
   assert.equal(h.undo(3), 2);
   assert.equal(h.undo(2), null);
 });
+
+test('drop olvida el último record sin tocar el estado', () => {
+  const h = createHistory();
+  let s = [1];
+  h.record(s); s = [1, 2];
+  h.record(s); s = [1, 2, 3];
+  h.drop();                       // el cambio a [1, 2, 3] se descartó
+  s = [1, 2];
+  assert.deepEqual((s = h.undo(s)), [1]);
+  assert.equal(h.canUndo(), false);
+});

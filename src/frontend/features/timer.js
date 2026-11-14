@@ -29,6 +29,7 @@ export function initTimer(ctx) {
   function sizeInputs() {
     for (const id of ['customMin', 'customSec']) {
       $(id).style.width = Math.max(2, $(id).value.length) + 'ch';
+      $(id).setAttribute('aria-valuenow', Number($(id).value) || 0);
     }
     $('timeEdit').classList.toggle('long', $('customMin').value.length > 2);
   }
@@ -42,6 +43,7 @@ export function initTimer(ctx) {
   }
 
   function render(st) {
+    const was = timerState.status;
     timerState = st;
     const { status } = st;
     const shown = status === 'idle' ? customSeconds() * 1000 : st.remaining;
@@ -66,6 +68,21 @@ export function initTimer(ctx) {
     $('timerMain').textContent = t(MAIN_LABEL[status]);
     $('timerMain').classList.toggle('stop', status === 'running');
     $('timerReset').disabled = status === 'idle';
+
+    // Al terminar, si el foco se perdía (botón Pausar → Iniciar), queda en el
+    // botón principal; el estado ya se anuncia por el role=status.
+    if (status === 'done' && was !== 'done' && ctx.state.get().activeTab === 'timer'
+        && (!document.activeElement || document.activeElement === document.body)) {
+      $('timerMain').focus({ preventScroll: true });
+    }
+  }
+
+  // ↑/↓ en minutos o segundos: ±1 (como la rueda).
+  function stepInput(id, d) {
+    const step = (id === 'customSec' ? 1 : 60) * d;
+    setCustomInputs(Math.min(MAX_EDIT_SECONDS, Math.max(0, customSeconds() + step)));
+    if (timerState.status === 'idle') render(timerState);
+    $(id).select();
   }
 
   async function call(method, params) {
@@ -120,7 +137,13 @@ export function initTimer(ctx) {
       sizeInputs();
       if (timerState.status === 'idle') render(timerState);
     });
-    $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
+    $(id).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') start();
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        stepInput(id, e.key === 'ArrowUp' ? 1 : -1);
+      }
+    });
     $(id).addEventListener('focus', (e) => e.target.select());
     $(id).addEventListener('blur', () => setCustomInputs(customSeconds()));
   }
