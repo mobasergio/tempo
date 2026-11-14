@@ -108,7 +108,7 @@ export default {
   'todo.hintHtml': '<kbd>Enter</kbd> add · double-click to edit · drag <span class="grip-glyph">⋮⋮</span> to reorder',
 
   // Schedule
-  'sched.hintHtml': 'Drag to create a block · click to edit · <kbd>Del</kbd> deletes the selected one',
+  'sched.hintHtml': 'Drag to create · click, <kbd>Enter</kbd> or type to edit · <kbd>Del</kbd> deletes · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes · <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> copies and pastes',
   'sched.widgetShow': 'Show widget',
   'sched.widgetHide': 'Hide widget',
   'sched.activity': 'Activity…',
@@ -120,12 +120,16 @@ export default {
   'sched.weekdays': 'Mon–Fri',
   'sched.weekend': 'Weekend',
   'sched.delete': 'Delete',
-  'sched.discard': 'Discard',
   'sched.startTimer': 'Start timer',
   'sched.save': 'Save',
   'sched.errTime': 'Invalid time.',
   'sched.errOrder': 'The end must be after the start.',
   'sched.errDays': 'Choose at least one day.',
+  'toast.undo': 'Undo',
+  'toast.blockDeleted': 'Block deleted',
+  'toast.undone': 'Undone',
+  'toast.redone': 'Redone',
+  'toast.copied': 'Block copied · Ctrl+V to paste',
   'color.cyan': 'Cyan', 'color.amber': 'Amber', 'color.red': 'Red', 'color.green': 'Green',
   'color.violet': 'Violet', 'color.pink': 'Pink', 'color.teal': 'Teal', 'color.gray': 'Gray',
 

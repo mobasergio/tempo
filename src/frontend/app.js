@@ -29,7 +29,7 @@ const state = createState({
   activeTab: 'sched',
   plugins: { timer: false, metro: false, todo: false },
 });
-const tabs = {};   // nombre → { onShow?, onKey? }
+const tabs = {};   // nombre → { onShow?, onKey?, onShortcut? }
 
 const tabAvailable = (name) =>
   name === 'sched' || (PLUGIN_IDS.includes(name) && !!state.get().plugins[name]);
@@ -78,8 +78,15 @@ tiny.api.on('plugins', applyPlugins);
 // ───────────────────── Atajos de teclado ─────────────────────
 // Cada pestaña atiende sus teclas con onKey; aquí solo se filtra.
 
+// Ctrl/Cmd + tecla (deshacer, copiar…) va a onShortcut; dentro de un campo de
+// texto se deja al navegador, que ya deshace y copia texto.
 document.addEventListener('keydown', (e) => {
-  if (ctx.modalOpen || isEditable(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (ctx.modalOpen || isEditable(e.target)) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    if (tabs[state.get().activeTab]?.onShortcut?.(e)) e.preventDefault();
+    return;
+  }
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (e.code === 'Space') {
     e.preventDefault();          // que no "pulse" también el botón enfocado
     if (e.repeat) return;

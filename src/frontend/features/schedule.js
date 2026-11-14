@@ -4,6 +4,8 @@
 // cada uno y muestra el actual en la bandeja; aquí solo se dibujan y editan.
 
 import { $, newId } from '../lib/util.js';
+import { createHistory } from '../lib/history.js';
+import { toast } from '../lib/toast.js';
 import { DAY_MIN, hhmm, parseHHMM, durText, weekNow } from '../../shared/time.js';
 import { COLORS, DEFAULT_COLOR, colorHex } from '../../shared/colors.js';
 import { layoutDay, isActiveAt, timerSecondsFor } from '../../shared/schedule-core.js';
@@ -25,8 +27,11 @@ export function initSchedule(ctx, { startTimer }) {
   const untitled = (b) => b.title || t('app.untitled');
   let blocks = [];
   let selectedId = null;
+  let selectedDay = 0;           // columna donde se seleccionó (bloques de varios días)
   let cursor = null;             // { day, min }: posición marcada con un clic
-  let editing = null;            // { id, isNew }
+  let editing = null;            // { id }
+  let clip = null;               // bloque copiado (Ctrl+C), sin id
+  const history = createHistory({ limit: 50 });
   let dragging = false;
   let saveTimer = null;
   let savesInFlight = 0;
@@ -35,6 +40,8 @@ export function initSchedule(ctx, { startTimer }) {
 
   const isShown = () => ctx.state.get().activeTab === 'sched';
   const blockById = (id) => blocks.find((b) => b.id === id);
+  // Llamar justo antes de cada cambio que se pueda deshacer.
+  const remember = () => history.record(blocks);
 
   // ───────────────────────── Estructura ─────────────────────────
 
@@ -201,21 +208,38 @@ export function initSchedule(ctx, { startTimer }) {
     else if (clientY > r.bottom - 24) body.scrollTop += 10;
   }
 
+  // Sigue un gesto de arrastre. Los pointermove se agrupan en un frame
+  // (requestAnimationFrame); si el horario se desplaza solo cerca de un borde,
+  // se sigue repintando aunque el ratón esté quieto.
   function track(e, onMove, onEnd) {
     dragging = true;
     const startX = e.clientX;
     const startY = e.clientY;
     let moved = false;
+    let last = null;
+    let raf = 0;
+    const frame = () => {
+      raf = 0;
+      if (!last) return;
+      const body = $('schedBody');
+      const before = body.scrollTop;
+      autoScroll(last.clientY);
+      onMove(last);
+      if (body.scrollTop !== before) raf = requestAnimationFrame(frame);
+    };
     const move = (ev) => {
       if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
       moved = true;
-      autoScroll(ev.clientY);
-      onMove(ev);
+      last = ev;
+      if (!raf) raf = requestAnimationFrame(frame);
     };
     const end = (ev) => {
       document.removeEventListener('pointermove', move);
       document.removeEventListener('pointerup', end);
       document.removeEventListener('pointercancel', end);
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      if (moved && last) onMove(last);       // el último movimiento sin pintar
       document.body.classList.remove('sched-dragging');
       dragging = false;
       onEnd(ev, moved);
@@ -262,55 +286,103 @@ export function initSchedule(ctx, { startTimer }) {
         return;
       }
       const b = { id: newId(), title: '', start: range[0], end: range[1], days: [day], color: DEFAULT_COLOR };
+      // Queda seleccionado, sin abrir el editor: Supr lo borra, y Enter,
+      // un clic o empezar a escribir lo nombran.
+      remember();
       blocks.push(b);
       selectedId = b.id;
+      selectedDay = day;
       render();
-      openEditor(b.id, day, true);
+      saveBlocks();
     });
   }
 
   // Mover (cuerpo) o redimensionar (bordes). En vertical cambia la hora en
   // todos sus días; en horizontal solo se mueven los bloques de un único día.
+  // El bloque sigue al ratón sin saltos y una sombra marca dónde caerá
+  // (ajustado a 15 min y a la columna); al soltar se coloca ahí.
   function dragBlock(e, node) {
     const b = blockById(node.dataset.id);
     if (!b) return;
     const mode = e.target.classList.contains('top') ? 'top'
       : e.target.classList.contains('bot') ? 'bot' : 'move';
     const fromDay = Number(node.dataset.day);
+    const single = b.days.length === 1;
     const grab = minuteAt(node.parentNode, e.clientY);
     const dur = b.end - b.start;
+    const startX = e.clientX;
     let next = { start: b.start, end: b.end, day: fromDay };
     const els = [...document.querySelectorAll(`.sblock[data-id="${CSS.escape(b.id)}"]`)];
+    const ghosts = els.map((el) => {
+      const g = document.createElement('div');
+      g.className = 'sblock ghost';
+      g.style.left = '2px';
+      g.style.width = 'calc(100% - 4px)';
+      g.dataset.day = el.dataset.day;
+      return g;
+    });
+    // límites horizontales: que no salga de la primera ni de la última columna
+    const left0 = cols[fromDay].getBoundingClientRect().left;
+    const dxMin = cols[0].getBoundingClientRect().left - left0;
+    const dxMax = cols[6].getBoundingClientRect().left - left0;
+    let started = false;
 
     cursor = null;
     track(e, (ev) => {
+      if (!started) {
+        started = true;
+        for (const el of els) {
+          el.classList.add('dragging');
+          el.style.left = '2px';
+          el.style.width = 'calc(100% - 4px)';
+        }
+      }
       const m = minuteAt(cols[0], ev.clientY);
+      let rawStart = b.start;
+      let rawEnd = b.end;
       if (mode === 'move') {
-        const start = clamp(snap(b.start + m - grab), 0, DAY_MIN - dur);
-        next = { start, end: start + dur, day: b.days.length === 1 ? Number(colAt(ev.clientX).dataset.day) : fromDay };
+        rawStart = clamp(b.start + m - grab, 0, DAY_MIN - dur);
+        rawEnd = rawStart + dur;
+        const start = clamp(snap(rawStart), 0, DAY_MIN - dur);
+        next = { start, end: start + dur, day: single ? Number(colAt(ev.clientX).dataset.day) : fromDay };
       } else if (mode === 'top') {
+        rawStart = clamp(m, 0, b.end - SNAP);
         next = { ...next, start: clamp(snap(m), 0, b.end - SNAP) };
       } else {
+        rawEnd = clamp(m, b.start + SNAP, DAY_MIN);
         next = { ...next, end: clamp(snap(m), b.start + SNAP, DAY_MIN) };
       }
-      for (const el of els) {
-        el.classList.add('dragging');
-        placeEl(el, next.start, next.end);
-        el.style.left = '2px';
-        el.style.width = 'calc(100% - 4px)';
-        el.querySelector('.sblock-time').textContent = `${hhmm(next.start)} – ${hhmm(next.end)}`;
-      }
-      if (next.day !== fromDay && els[0].parentNode !== cols[next.day]) cols[next.day].append(els[0]);
+
+      const label = `${hhmm(next.start)} – ${hhmm(next.end)}`;
+      const dy = ((rawStart - b.start) / 60) * HOUR_PX;
+      const dx = single ? clamp(ev.clientX - startX, dxMin, dxMax) : 0;
+      els.forEach((el, i) => {
+        if (mode === 'move') el.style.transform = `translate(${dx}px, ${dy}px)`;
+        else placeEl(el, rawStart, rawEnd);
+        el.querySelector('.sblock-time').textContent = label;
+        const g = ghosts[i];
+        const col = cols[single ? next.day : Number(g.dataset.day)];
+        if (g.parentNode !== col) col.append(g);
+        placeEl(g, next.start, next.end);
+        g.textContent = label;
+      });
     }, (ev, moved) => {
+      for (const g of ghosts) g.remove();
       selectedId = b.id;
+      selectedDay = moved ? next.day : fromDay;
       if (!moved) {
         render();
-        openEditor(b.id, fromDay, false);
+        openEditor(b.id, fromDay);
         return;
       }
+      if (next.start === b.start && next.end === b.end && (!single || next.day === b.days[0])) {
+        render();
+        return;
+      }
+      remember();
       b.start = next.start;
       b.end = next.end;
-      if (b.days.length === 1) b.days = [next.day];
+      if (single) b.days = [next.day];
       render();
       saveBlocks();
     });
@@ -376,22 +448,24 @@ export function initSchedule(ctx, { startTimer }) {
     $('edErr').hidden = true;
   }
 
-  function openEditor(id, day, isNew) {
+  // seed: tecla con la que se empezó a escribir sobre el bloque seleccionado.
+  function openEditor(id, day, { seed } = {}) {
     const b = blockById(id);
     if (!b) return;
-    editing = { id, isNew };
-    $('edTitle').value = b.title;
+    editing = { id };
+    $('edTitle').value = seed ?? b.title;
     $('edStart').value = hhmm(b.start);
     $('edEnd').value = hhmm(b.end % DAY_MIN);
     ed.days = new Set(b.days);
     ed.color = b.color in COLORS ? b.color : DEFAULT_COLOR;
-    $('edDelete').textContent = t(isNew ? 'sched.discard' : 'sched.delete');
     paintEditor();
 
     $('schedEditor').hidden = false;
     positionEditor(id, day);
-    $('edTitle').focus();
-    if (!isNew) $('edTitle').select();
+    const title = $('edTitle');
+    title.focus();
+    if (seed == null) title.select();
+    else title.setSelectionRange(title.value.length, title.value.length);
   }
 
   // Junto al bloque: a la derecha si cabe, si no a la izquierda.
@@ -429,7 +503,12 @@ export function initSchedule(ctx, { startTimer }) {
       $('edErr').hidden = false;
       return false;
     }
-    Object.assign(b, v);
+    const same = v.title === b.title && v.start === b.start && v.end === b.end
+      && v.color === b.color && v.days.join() === b.days.join();
+    if (!same) {
+      remember();
+      Object.assign(b, v);
+    }
     closeEditor();
     render();
     saveBlocks();
@@ -438,21 +517,87 @@ export function initSchedule(ctx, { startTimer }) {
 
   function cancelEditor() {
     if (!editing) return;
-    if (editing.isNew) {
-      const id = editing.id;
-      blocks = blocks.filter((b) => b.id !== id);
-      selectedId = null;
-    }
     closeEditor();
     render();
   }
 
   function deleteBlock(id) {
+    if (!blockById(id)) return;
+    remember();
     blocks = blocks.filter((b) => b.id !== id);
     if (selectedId === id) selectedId = null;
     if (editing && editing.id === id) closeEditor();
     render();
     saveBlocks();
+    toast(t('toast.blockDeleted'), { action: { label: t('toast.undo'), run: () => undo() } });
+  }
+
+  // ─────────────────── Deshacer, copiar y pegar ───────────────────
+
+  function restore(list, msg) {
+    if (!list) return;
+    blocks = list;
+    if (selectedId && !blockById(selectedId)) selectedId = null;
+    cursor = null;
+    render();
+    saveBlocks();
+    toast(msg, { ms: 1800 });
+  }
+  // Si el editor está abierto, primero se guarda (y así entra en el historial).
+  function closeEditing() {
+    if (editing && !commitEditor()) cancelEditor();
+  }
+  function undo() {
+    closeEditing();
+    restore(history.undo(blocks), t('toast.undone'));
+  }
+  function redo() {
+    closeEditing();
+    restore(history.redo(blocks), t('toast.redone'));
+  }
+
+  function copySelected() {
+    const b = selectedId && blockById(selectedId);
+    if (!b) return false;
+    clip = { title: b.title, color: b.color, start: b.start, end: b.end, days: [...b.days] };
+    toast(t('toast.copied'), { ms: 1800 });
+    return true;
+  }
+
+  // Con un hueco marcado (clic), se pega ahí en ese día; si no, justo después
+  // del original (o justo antes si no cabe antes de medianoche).
+  function paste() {
+    if (!clip) return false;
+    closeEditing();
+    const dur = clip.end - clip.start;
+    let start, end, days;
+    if (cursor) {
+      start = cursor.min;
+      end = Math.min(DAY_MIN, start + dur);
+      days = [cursor.day];
+    } else {
+      start = clip.end + dur <= DAY_MIN ? clip.end : Math.max(0, clip.start - dur);
+      end = start + dur;
+      days = [...clip.days];
+    }
+    const b = { id: newId(), title: clip.title, color: clip.color, start, end, days };
+    remember();
+    blocks.push(b);
+    selectedId = b.id;
+    selectedDay = days[0];
+    cursor = null;
+    render();
+    saveBlocks();
+    return true;
+  }
+
+  function onShortcut(e) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { undo(); return true; }
+    if (k === 'y' || (k === 'z' && e.shiftKey)) { redo(); return true; }
+    if (k === 'c') return copySelected();
+    if (k === 'v') return paste();
+    return false;
   }
 
   $('schedEditor').addEventListener('submit', (e) => {
@@ -460,15 +605,22 @@ export function initSchedule(ctx, { startTimer }) {
     commitEditor();
   });
   $('schedEditor').addEventListener('keydown', (e) => {
+    const el = e.target;
     if (e.key === 'Escape') {
       e.preventDefault();
       cancelEditor();
+    } else if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && editing) {
+      // Supr borra el bloque salvo que en el título quede algo que borrar
+      // (texto seleccionado o el cursor antes del final). Las horas, normal.
+      if (el.classList.contains('ed-time')) return;
+      if (el === $('edTitle') && (el.selectionStart !== el.selectionEnd || el.selectionEnd < el.value.length)) return;
+      e.preventDefault();
+      deleteBlock(editing.id);
     }
   });
   $('edDelete').addEventListener('click', () => {
     if (!editing) return;
-    if (editing.isNew) cancelEditor();
-    else deleteBlock(editing.id);
+    deleteBlock(editing.id);
   });
   $('edTimer').addEventListener('click', () => {
     if (!editing) return;
@@ -490,8 +642,9 @@ export function initSchedule(ctx, { startTimer }) {
     if (inGrid) e.stopPropagation();
     if (node && blockById(node.dataset.id)) {
       selectedId = node.dataset.id;
+      selectedDay = day;
       render();
-      openEditor(selectedId, day, false);
+      openEditor(selectedId, day);
     } else {
       selectedId = null;
       render();
@@ -501,7 +654,16 @@ export function initSchedule(ctx, { startTimer }) {
   // Solo Supr borra: Retroceso se pulsa sin querer con demasiada facilidad.
   function onKey(e) {
     if (editing) return;
-    if (e.key === 'Delete' && selectedId) {
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (selectedId && !blockById(selectedId)) selectedId = null;
+    if (plain && selectedId && e.key === 'Enter') {
+      e.preventDefault();
+      openEditor(selectedId, selectedDay);
+    } else if (plain && selectedId && e.key.length === 1 && e.key !== ' ') {
+      // empezar a escribir sobre el bloque seleccionado = ponerle nombre
+      e.preventDefault();
+      openEditor(selectedId, selectedDay, { seed: e.key });
+    } else if (e.key === 'Delete' && selectedId) {
       e.preventDefault();
       deleteBlock(selectedId);
     } else if (e.key === 'Escape' && (selectedId || cursor)) {
@@ -539,7 +701,7 @@ export function initSchedule(ctx, { startTimer }) {
   buildGrid();
   buildEditor();
   setInterval(() => { if (isShown() && !dragging) renderNow(); }, 30000);
-  ctx.registerTab('sched', { onShow, onKey });
+  ctx.registerTab('sched', { onShow, onKey, onShortcut });
 
   return {
     async boot() {

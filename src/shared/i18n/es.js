@@ -110,7 +110,7 @@ export default {
   'todo.hintHtml': '<kbd>Intro</kbd> añadir · doble clic para editar · arrastra <span class="grip-glyph">⋮⋮</span> para ordenar',
 
   // Horario
-  'sched.hintHtml': 'Arrastra para crear un bloque · clic para editar · <kbd>Supr</kbd> elimina el seleccionado',
+  'sched.hintHtml': 'Arrastra para crear · clic, <kbd>Intro</kbd> o escribe para editar · <kbd>Supr</kbd> elimina · <kbd>Ctrl</kbd>+<kbd>Z</kbd> deshace · <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> copia y pega',
   'sched.widgetShow': 'Mostrar widget',
   'sched.widgetHide': 'Ocultar widget',
   'sched.activity': 'Actividad…',
@@ -122,12 +122,16 @@ export default {
   'sched.weekdays': 'L–V',
   'sched.weekend': 'Fin de semana',
   'sched.delete': 'Eliminar',
-  'sched.discard': 'Descartar',
   'sched.startTimer': 'Iniciar temporizador',
   'sched.save': 'Guardar',
   'sched.errTime': 'Hora no válida.',
   'sched.errOrder': 'El fin debe ser posterior al inicio.',
   'sched.errDays': 'Elige al menos un día.',
+  'toast.undo': 'Deshacer',
+  'toast.blockDeleted': 'Bloque eliminado',
+  'toast.undone': 'Deshecho',
+  'toast.redone': 'Rehecho',
+  'toast.copied': 'Bloque copiado · Ctrl+V para pegar',
   'color.cyan': 'Cian', 'color.amber': 'Ámbar', 'color.red': 'Rojo', 'color.green': 'Verde',
   'color.violet': 'Violeta', 'color.pink': 'Rosa', 'color.teal': 'Turquesa', 'color.gray': 'Gris',
 
