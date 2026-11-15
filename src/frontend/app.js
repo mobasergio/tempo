@@ -8,6 +8,7 @@ import { cleanSettings } from '../shared/settings.js';
 import { initSchedule } from './features/schedule.js';
 import { initSettings } from './features/settings.js';
 import { initShortcuts } from './features/shortcuts.js';
+import { initUpdate } from './features/update.js';
 
 // Los ajustes deciden idioma y tema antes de construir nada (si el backend
 // fallara, se sigue con los valores por defecto en vez de dejar la página muerta).
@@ -20,6 +21,7 @@ const t = setupI18n(initial.settings);
 const ctx = { t, modalOpen: false };
 
 const schedule = initSchedule(ctx);
+initUpdate(ctx);
 initSettings(ctx, initial);
 const shortcuts = initShortcuts(ctx);
 

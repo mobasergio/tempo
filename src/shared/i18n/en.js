@@ -59,6 +59,13 @@ export default {
   'key.shift': 'Shift',
   'key.del': 'Del',
 
+  // Update
+  'update.available': 'Version {ver} is available',
+  'update.install': 'Update',
+  'update.installing': 'Updating…',
+  'update.retry': 'Retry',
+  'update.failed': '· Update failed: {msg}',
+
   // Days (0 = Monday)
   'days.short': ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
   'days.long': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],

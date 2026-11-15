@@ -17,6 +17,13 @@
 </head>
 <body>
 
+<!-- ───────── Actualización (features/update.js) ───────── -->
+<div class="update-bar" id="updateBar" role="status" hidden>
+  <span id="updateMsg"></span>
+  <span id="updateErr" hidden></span>
+  <button class="btn link" id="updateInstall" data-i18n="update.install">Actualizar</button>
+</div>
+
 <!-- ───────── Ajustes (modal) ───────── -->
 <div class="settings-scrim" id="settings" hidden>
   <div class="settings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" tabindex="-1">

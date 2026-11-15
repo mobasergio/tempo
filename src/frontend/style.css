@@ -127,6 +127,22 @@ button:disabled { cursor: default; }
   inset: -6px;
 }
 
+/* ───────────────────────── Actualización ───────────────────────── */
+.update-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s4);
+  background: var(--cyan-tint);
+  color: var(--cyan-400);
+  font-size: 13px;
+}
+.update-bar[hidden] { display: none; }
+.update-bar .btn.link { padding: 4px var(--s2); font-size: 13px; color: var(--cyan-500); }
+.update-bar .btn.link:hover:not(:disabled) { color: var(--gray-100); }
+.update-bar .btn.link:disabled { color: var(--gray-500); }
+
 /* ─────────────────── Botones de atajos y ajustes ─────────────────── */
 .settings-btn {
   width: 30px;

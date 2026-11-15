@@ -60,6 +60,13 @@ export default {
   'key.shift': 'Mayús',
   'key.del': 'Supr',
 
+  // Actualización
+  'update.available': 'Nueva versión {ver} disponible',
+  'update.install': 'Actualizar',
+  'update.installing': 'Actualizando…',
+  'update.retry': 'Reintentar',
+  'update.failed': '· No se pudo actualizar: {msg}',
+
   // Días (0 = lunes)
   'days.short': ['L', 'M', 'X', 'J', 'V', 'S', 'D'],
   'days.long': ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'],
