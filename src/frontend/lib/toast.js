@@ -40,7 +40,7 @@ function bind(box) {
   box.addEventListener('focusout', () => setTimeout(resume));
 }
 
-export function hideToast() {
+function hideToast() {
   clearTimeout(timer);
   timer = null;
   const box = el();

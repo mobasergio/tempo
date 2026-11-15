@@ -4,7 +4,7 @@
 const FOCUSABLE = 'button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 /** Elementos enfocables y visibles dentro de `root`. */
-export function focusables(root) {
+function focusables(root) {
   return [...root.querySelectorAll(FOCUSABLE)].filter((el) => !el.disabled && !el.hidden && el.offsetParent);
 }
 
@@ -77,7 +77,7 @@ export function createDialog(ctx, scrim, { onOpen, onClose, canClose } = {}) {
     } else trapTab(e, dialog);
   });
 
-  return { open, close, isOpen: () => !scrim.hidden && !closing, toggle: () => (scrim.hidden || closing ? open() : close()) };
+  return { open, close };
 }
 
 /** Región aria-live compartida para anuncios de lector de pantalla. */

@@ -1,24 +1,19 @@
-// Panel «Atajos de teclado» (tecla ? o el botón de la barra superior).
-// Sustituye a las pistas de cada pestaña: aquí caben todos sin apretujarse.
-// La pestaña activa aparece primero; los plugins desactivados no salen.
+// Panel «Atajos de teclado» (tecla ? o el botón del pie del horario): aquí
+// caben todos sin apretujarse. El horario va primero, que es lo que se consulta.
 
 import { $ } from '../lib/util.js';
 import { createDialog } from '../lib/dialog.js';
 
-// Cada atajo: [clave de descripción, combinaciones]. Una combinación es una
-// lista de teclas; varias combinaciones se muestran como alternativas.
+// Secciones: [título, atajos]. Cada atajo: [clave de descripción, combinaciones].
+// Una combinación es una lista de teclas; varias se muestran como alternativas.
 // Las teclas con nombre ('key.*') se traducen; el resto se muestra tal cual.
-const SECTIONS = {
-  general: [
-    ['shortcuts.show', [['?']]],
-    ['shortcuts.tabs', [['←', '→']]],
-    ['shortcuts.close', [['key.esc']]],
-  ],
-  sched: [
+const SECTIONS = [
+  ['sched.title', [
     ['shortcuts.sched.create', [['shortcuts.drag']]],
     ['shortcuts.sched.createKey', [['key.enter']]],
     ['shortcuts.sched.nav', [['←', '→', '↑', '↓']]],
     ['shortcuts.sched.edit', [['key.enter'], ['shortcuts.type']]],
+    ['shortcuts.sched.open', [['shortcuts.rightClick'], ['shortcuts.dblClick']]],
     ['shortcuts.sched.move', [['Alt', '↑'], ['Alt', '↓']]],
     ['shortcuts.sched.resize', [['Alt', 'key.shift', '↑'], ['Alt', 'key.shift', '↓']]],
     ['shortcuts.sched.delete', [['key.del']]],
@@ -26,27 +21,12 @@ const SECTIONS = {
     ['shortcuts.redo', [['Ctrl', 'Y'], ['Ctrl', 'key.shift', 'Z']]],
     ['shortcuts.sched.copy', [['Ctrl', 'C'], ['Ctrl', 'V']]],
     ['shortcuts.sched.deselect', [['key.esc']]],
-  ],
-  timer: [
-    ['shortcuts.timer.toggle', [['key.space']]],
-    ['shortcuts.timer.adjust', [['↑', '↓'], ['shortcuts.wheel']]],
-    ['shortcuts.timer.startNow', [['key.enter']]],
-  ],
-  metro: [
-    ['shortcuts.metro.toggle', [['key.space']]],
-    ['shortcuts.metro.bpm', [['↑', '↓']]],
-    ['shortcuts.metro.bpm10', [['key.pgup', 'key.pgdn']]],
-    ['shortcuts.metro.meter', [['←', '→']]],
-  ],
-  todo: [
-    ['shortcuts.todo.add', [['key.enter']]],
-    ['shortcuts.todo.edit', [['key.enter'], ['F2']]],
-    ['shortcuts.todo.toggle', [['key.space']]],
-    ['shortcuts.todo.reorder', [['Alt', '↑'], ['Alt', '↓']]],
-    ['shortcuts.todo.delete', [['key.del']]],
-  ],
-};
-const TITLES = { general: 'shortcuts.general', sched: 'tab.sched', timer: 'tab.timer', metro: 'tab.metro', todo: 'tab.todo' };
+  ]],
+  ['shortcuts.general', [
+    ['shortcuts.show', [['?']]],
+    ['shortcuts.close', [['key.esc']]],
+  ]],
+];
 // Combinaciones de varias teclas que se pulsan a la vez (Alt+↑) frente a
 // grupos de teclas sueltas (← →): las flechas solas se separan con espacio.
 const ARROWS = new Set(['←', '→', '↑', '↓']);
@@ -58,7 +38,7 @@ export function initShortcuts(ctx) {
   function comboEl(combo) {
     const wrap = document.createElement('span');
     wrap.className = 'sc-combo';
-    const together = !combo.every((k) => ARROWS.has(k) || k.startsWith('key.pg'));
+    const together = !combo.every((k) => ARROWS.has(k));
     combo.forEach((k, i) => {
       if (i && together) wrap.append('+');
       // gestos de ratón («Arrastrar», «Escribir») van como texto, no como tecla
@@ -77,20 +57,17 @@ export function initShortcuts(ctx) {
   }
 
   function render() {
-    const { activeTab } = ctx.state.get();
-    const order = [activeTab, ...Object.keys(SECTIONS).filter((k) => k !== activeTab && k !== 'general'), 'general']
-      .filter((k, i, a) => a.indexOf(k) === i && (k === 'general' || ctx.tabAvailable(k)));
     const body = $('shortcutsBody');
     body.replaceChildren();
-    for (const key of order) {
+    for (const [title, rows] of SECTIONS) {
       const sec = document.createElement('section');
       sec.className = 'settings-sec';
       const h = document.createElement('h3');
       h.className = 'eyebrow';
-      h.textContent = t(TITLES[key]);
+      h.textContent = t(title);
       const dl = document.createElement('dl');
       dl.className = 'sc-list';
-      for (const [desc, combos] of SECTIONS[key]) {
+      for (const [desc, combos] of rows) {
         const row = document.createElement('div');
         row.className = 'sc-row';
         const dt = document.createElement('dt');

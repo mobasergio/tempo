@@ -35,7 +35,6 @@ export function createSettings({ app, onLangChange }) {
     HOTKEY_ID,
     get: () => s,
     get t() { return t; },
-    get lang() { return t.lang; },
 
     async load() {
       s = cleanSettings(await app.store.get('settings'));

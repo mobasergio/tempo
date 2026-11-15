@@ -1,16 +1,17 @@
 // Ajustes de la app: esquema, valores por defecto y validación. Los guarda el
-// backend (clave 'settings' del store); plugins y widget tienen claves propias.
+// backend (clave 'settings' del store); el widget tiene claves propias.
 
 export const SETTINGS_VERSION = 1;
-export const THEMES = ['system', 'light', 'dark'];
-export const LANGS = ['es', 'en'];
-export const LANG_PREFS = ['system', ...LANGS];
+const THEMES = ['system', 'light', 'dark'];
+const LANGS = ['es', 'en'];
+const LANG_PREFS = ['system', ...LANGS];
 
 export const DEFAULT_SETTINGS = {
   theme: 'system',
   lang: 'system',
   sysLang: 'es',        // idioma del sistema según la última página que lo vio
   notifySound: true,
+  notifyPopup: true,    // ventana emergente al empezar/terminar un bloque
   hotkey: '',           // p. ej. 'ctrl+alt+t'; vacío = sin atajo
 };
 
@@ -37,6 +38,7 @@ export function cleanSettings(obj) {
   if (LANG_PREFS.includes(obj.lang)) s.lang = obj.lang;
   if (LANGS.includes(obj.sysLang)) s.sysLang = obj.sysLang;
   if (typeof obj.notifySound === 'boolean') s.notifySound = obj.notifySound;
+  if (typeof obj.notifyPopup === 'boolean') s.notifyPopup = obj.notifyPopup;
   if ('hotkey' in obj) s.hotkey = cleanHotkey(obj.hotkey);
   return s;
 }

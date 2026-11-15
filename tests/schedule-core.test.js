@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cleanBlocks, currentBlock, nextBlock, blocksStartingIn, layoutDay, isActiveAt, timerSecondsFor, MAX_BLOCKS,
+  cleanBlocks, currentBlock, nextBlock, blocksStartingIn, layoutDay, isActiveAt, endedNaturally,
+  MAX_BLOCKS, MAX_NOTES,
 } from '../src/shared/schedule-core.js';
 
 const blk = (id, start, end, days, extra = {}) => ({ id, title: id, start, end, days, color: 'cyan', ...extra });
@@ -88,8 +89,30 @@ test('layoutDay: carriles para solapes y grupos independientes', () => {
   assert.deepEqual(out, { a: [0, 2], b: [1, 2], c: [0, 2], d: [0, 1] });
 });
 
-test('timerSecondsFor: restante si está en curso, duración si no', () => {
+test('cleanBlocks: locked y notes', () => {
+  const [a, b, c] = cleanBlocks([
+    blk('a', 0, 30, [0], { locked: true, notes: 'hola' }),
+    blk('b', 0, 30, [0], { locked: 'sí', notes: 42 }),
+    blk('c', 0, 30, [0], { notes: 'x'.repeat(MAX_NOTES + 5) }),
+  ]);
+  assert.equal(a.locked, true);
+  assert.equal(a.notes, 'hola');
+  assert.equal(b.locked, false);         // solo true cuenta
+  assert.equal(b.notes, '');
+  assert.equal(c.locked, false);
+  assert.equal(c.notes.length, MAX_NOTES);
+});
+
+test('endedNaturally: final por su hora, no por borrarlo ni tras una suspensión', () => {
   const b = blk('a', 9 * 60, 10 * 60, [0]);
-  assert.equal(timerSecondsFor(b, { day: 0, min: 9 * 60 + 30, sec: 15 }), 29 * 60 + 45);
-  assert.equal(timerSecondsFor(b, at(1, 9, 30)), 3600);
+  assert.equal(endedNaturally([b], b, 0, at(0, 10), 2), true);
+  assert.equal(endedNaturally([b], b, 0, at(0, 10, 2), 2), true);
+  assert.equal(endedNaturally([b], b, 0, at(0, 10, 3), 2), false);   // fuera de margen
+  assert.equal(endedNaturally([b], b, 0, at(0, 9, 30), 2), false);   // aún no
+  assert.equal(endedNaturally([], b, 0, at(0, 10), 2), false);       // borrado
+  const moved = { ...b, end: 11 * 60 };
+  assert.equal(endedNaturally([moved], b, 0, at(0, 10), 2), false);  // alargado
+  const late = blk('n', 23 * 60, 24 * 60, [6]);                      // domingo hasta medianoche
+  assert.equal(endedNaturally([late], late, 6, at(0, 0), 2), true);
+  assert.equal(endedNaturally([late], late, 6, at(0, 5), 2), false);
 });

@@ -2,18 +2,11 @@
 // El backend decide qué bloque toca; aquí solo se cuenta el tiempo.
 
 import { $ } from './lib/util.js';
-import { setupI18n } from './lib/i18n.js';
-import { applyTheme } from './lib/theme.js';
-import { hhmm, fmtClock, weekNow } from '../shared/time.js';
+import { bootPage } from './lib/page.js';
+import { hhmm, fmtClock, weekNow, whenText } from '../shared/time.js';
 import { colorHex } from '../shared/colors.js';
-import { cleanSettings } from '../shared/settings.js';
 
-const initial = await tiny.api.call('getSettings').catch(() => ({ settings: cleanSettings(null) }));
-const t = setupI18n(initial.settings);
-applyTheme(initial.settings.theme);
-tiny.api.on('settings', (s) => { if (s) applyTheme(s.theme); });
-
-const DAY_LONG = t('days.long');
+const t = await bootPage();
 let state = { now: null, next: null };
 let lastMinute = -1;
 
@@ -22,13 +15,7 @@ function daySec() {
   return n.min * 60 + n.sec;
 }
 
-function nextText(nx) {
-  if (!nx) return '';
-  const when = nx.inDays === 0 ? hhmm(nx.start)
-    : nx.inDays === 1 ? `${t('days.tomorrow')} ${hhmm(nx.start)}`
-    : `${DAY_LONG[nx.day].toLowerCase()} ${hhmm(nx.start)}`;
-  return t('widget.next', { title: nx.title || t('app.untitled'), when });
-}
+const nextText = (nx) => (nx ? t('widget.next', { title: nx.title || t('app.untitled'), when: whenText(t, nx) }) : '');
 
 function render() {
   const { now, next } = state;

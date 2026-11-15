@@ -1,23 +1,27 @@
-// Backend de Tempo: une los módulos (temporizador, horario, widget, bandeja)
+// Backend de Tempo: une los módulos (horario, widget, aviso, bandeja, ajustes)
 // y expone la API y los hooks que llama tinyjs.
 
-import { createTimer } from './timer.js';
 import { createSchedule } from './schedule.js';
 import { createWidget } from './widget.js';
+import { createAlert } from './alert.js';
 import { createTray } from './tray.js';
 import { createSettings } from './settings.js';
 
 const APP_TITLE = 'Tempo';
 
-// Plugins opcionales (el horario es la app): deciden qué pestañas se ven y
-// qué items lleva la bandeja.
-const PLUGIN_IDS = ['timer', 'metro', 'todo'];
-const plugins = { timer: false, metro: false, todo: false };
+// Ventana oculta que hace de "dueña" del widget y del aviso: en Windows una
+// ventana con dueño no sale en Alt+Tab ni en la barra de tareas. No vale la
+// principal, que se esconde en la bandeja y se llevaría las demás con ella.
+const ANCHOR = 'anchor';
+
+// Claves de versiones anteriores (plugins, pestañas, migraciones) que ya no se
+// usan: se borran al arrancar. Borrar una que no existe no hace nada.
+const OBSOLETE_KEYS = ['plugins', 'lastDuration', 'bpm', 'meter', 'accents', 'volume', 'todos', 'activeTab', 'sizeMigrated'];
 
 let app = null;
-let timer = null;
 let schedule = null;
 let widget = null;
+let alertWin = null;
 let tray = null;
 let settings = null;
 
@@ -27,25 +31,9 @@ const t = (key, vars) => settings.t(key, vars);
 const refreshTray = () => tray && tray.update();
 
 export const api = {
-  // ── Temporizador ──
-  async start({ seconds } = {}) { return timer.start(seconds); },
-  async pause() { return timer.pause(); },
-  async resume() { return timer.resume(); },
-  async reset() { return timer.reset(); },
-  async getState() { return timer.snapshot(); },
-
-  // ── Plugins ──
-  async getPlugins() { return { ...plugins }; },
-
-  async setPlugins(next = {}) {
-    for (const id of PLUGIN_IDS) if (id in next) plugins[id] = !!next[id];
-    await app.store.set('plugins', { ...plugins });
-    if (!plugins.timer && timer.status !== 'idle') timer.reset();
-    if (!plugins.metro) tray.setMetro(false);   // la página para el metrónomo
-    tray.set();
-    app.push('plugins', { ...plugins });
-    return { ...plugins };
-  },
+  // ── Horario ──
+  async getBlocks() { return schedule.blocks; },
+  async saveBlocks({ blocks } = {}) { return schedule.save(blocks); },
 
   // ── Widget ──
   async getWidget() { return widget.state(); },
@@ -55,27 +43,23 @@ export const api = {
     return widget.state();
   },
 
-  // Desde el widget: abre la ventana principal en el horario.
-  async showSchedule() {
-    tray.show();
-    app.push('show-tab', 'sched');
-  },
+  // Desde el widget o el aviso: muestra la ventana principal.
+  async showSchedule() { tray.show(); },
 
-  // ── Horario ──
-  async getBlocks() { return schedule.blocks; },
-  async saveBlocks({ blocks } = {}) { return schedule.save(blocks); },
+  // ── Aviso emergente ──
+  async getAlert() { return alertWin.current; },
+  async dismissAlert() { alertWin.close(); },
 
   // ── Ajustes ──
   async getSettings() {
     return {
       settings: settings.get(),
-      plugins: { ...plugins },
       widget: widget.on,
       launchAtLogin: await settings.launchStatus(),
     };
   },
 
-  // patch: theme, lang, sysLang, notifySound, hotkey (ver shared/settings.js)
+  // patch: ver cleanSettings en shared/settings.js
   async setSettings(patch = {}) {
     const s = await settings.set(patch);
     app.push('settings', s);
@@ -85,28 +69,12 @@ export const api = {
   async setLaunchAtLogin({ on } = {}) {
     return settings.setLaunchAtLogin(on);
   },
-
-  // ── Metrónomo ──
-  // La página avisa de cada arranque/parada (etiqueta de la bandeja).
-  async metroState({ running } = {}) { tray.setMetro(running); },
 };
 
 export async function onTray(id) {
-  if (id === null || id === 'show') {
-    tray.toggleWindow();
-  } else if ((id === 'timer' || id === 'metro') && !plugins[id]) {
-    // plugin desactivado: no hay nada que hacer
-  } else if (id === 'timer') {
-    timer.toggle();
-  } else if (id === 'metro') {
-    // lo arranca/para la página (recibe el mismo evento 'tray'); oculta está
-    // congelada, así que primero se muestra
-    if (!tray.visible) tray.show();
-  } else if (id === 'widget') {
-    await widget.setOn(!widget.on);
-  } else if (id === 'quit') {
-    app.quit();
-  }
+  if (id === null || id === 'show') tray.toggleWindow();
+  else if (id === 'widget') await widget.setOn(!widget.on);
+  else if (id === 'quit') app.quit();
 }
 
 // Atajo global de Ajustes: muestra u oculta la ventana.
@@ -118,6 +86,7 @@ export function onHotkey(info) {
 export function onWindowClosed(id) {
   const wid = typeof id === 'string' ? id : id && (id.id || id.win);
   if (wid === 'widget') widget.closed();
+  else if (wid === 'alert') alertWin.closed();
 }
 
 export function onWindowState(info) {
@@ -129,56 +98,79 @@ export function onSystem(kind) {
   if (kind === 'wake' && schedule) schedule.resync();
 }
 
-// Idioma nuevo: la bandeja y el título del widget se rehacen aquí; las
-// páginas se recargan solas al recibir 'settings'.
+// Idioma nuevo: la bandeja y los títulos de las ventanitas se rehacen aquí;
+// las páginas se recargan solas al recibir 'settings'.
 function applyLang() {
   if (tray) tray.set();
   try { app.window('widget').setTitle(t('widget.windowTitle', { app: APP_TITLE })); } catch {}
+  try { app.window('alert').setTitle(t('alert.windowTitle', { app: APP_TITLE })); } catch {}
+}
+
+// De una en una: varios delete a la vez reescriben el store en paralelo y
+// alguno se pierde.
+async function dropObsoleteKeys() {
+  try {
+    const all = await app.store.all();
+    for (const k of OBSOLETE_KEYS) if (all && k in all) await app.store.delete(k);
+  } catch {}
+}
+
+/** Aviso de cambio de tarea (si está activado en Ajustes). */
+function popup(kind, block) {
+  if (!settings.get().notifyPopup) return;
+  alertWin.show({ kind, block, next: schedule.next() }).catch(() => {});
 }
 
 export async function init(a) {
   app = a;
   app.setTitle(APP_TITLE);
-
-  const savedPlugins = await app.store.get('plugins');
-  if (savedPlugins && typeof savedPlugins === 'object') {
-    for (const id of PLUGIN_IDS) plugins[id] = !!savedPlugins[id];
-  }
+  await dropObsoleteKeys();
 
   settings = createSettings({ app, onLangChange: applyLang });
   await settings.load();
 
-  timer = createTimer({ app, title: APP_TITLE, t, onChange: refreshTray });
   schedule = createSchedule({
     app,
     t,
     getSettings: () => settings.get(),
     onNowChange: refreshTray,
     onWidgetChange: () => widget.push(),
-    onStart: (b) => widget.alert(b),
+    onStart: (b) => {
+      widget.alert(b);
+      popup('start', b);
+    },
+    // terminó el bloque en curso: se vuelve a uno solapado o no queda ninguno
+    onSwitch: ({ ended, now }) => {
+      if (now) widget.alert(now);
+      popup(now ? 'start' : 'end', now || ended);
+    },
   });
+  alertWin = createAlert({ app, title: APP_TITLE, t, parent: ANCHOR, getSettings: () => settings.get() });
   widget = createWidget({
     app,
     title: APP_TITLE,
     t,
     info: () => ({ now: schedule.now, next: schedule.next() }),
+    parent: ANCHOR,
     onChange: refreshTray,
   });
 
-  await timer.load();
   await schedule.load();
+  app.win.open(ANCHOR, {
+    page: 'anchor.html',
+    size: '1x1',
+    show: false,
+    chrome: { frame: false, windowControls: false },
+  });
   await widget.load();   // antes de la bandeja: sus etiquetas dependen de él
 
   const res = (await app.paths()).resources;
-  tray = createTray({
-    app, title: APP_TITLE, t, icon: res ? res + '/tray.png' : '',
-    plugins, timer, schedule, widget,
-  });
+  tray = createTray({ app, title: APP_TITLE, t, icon: res ? res + '/tray.png' : '', schedule, widget });
   app.setHideOnClose(true);
   tray.set();
 
   schedule.check();
   setInterval(schedule.check, 5000);
-  setInterval(() => tray.poll().catch(() => {}), 500);
+  setInterval(() => tray.poll().catch(() => {}), 1000);
   setInterval(() => widget.poll().catch(() => {}), 2000);
 }

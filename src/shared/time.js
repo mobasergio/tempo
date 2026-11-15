@@ -4,10 +4,23 @@
 // Los nombres de los días están en los diccionarios (shared/i18n).
 export const DAY_MIN = 24 * 60;
 
-export const pad2 = (n) => String(n).padStart(2, '0');
+const pad2 = (n) => String(n).padStart(2, '0');
 
 /** Minutos desde las 00:00 → "HH:MM". */
 export const hhmm = (min) => `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+
+/** Franja "HH:MM – HH:MM". */
+export const rangeText = (start, end) => `${hhmm(start)} – ${hhmm(end)}`;
+
+/**
+ * Cuándo empieza un bloque devuelto por nextBlock: "09:00" (hoy),
+ * "mañana 09:00" o "martes 09:00". t: traductor de shared/i18n.
+ */
+export function whenText(t, { inDays, day, start }) {
+  if (inDays === 0) return hhmm(start);
+  if (inDays === 1) return `${t('days.tomorrow')} ${hhmm(start)}`;
+  return `${t('days.long')[day].toLowerCase()} ${hhmm(start)}`;
+}
 
 /** "HH:MM" → minutos desde las 00:00 (NaN si no es válido). */
 export function parseHHMM(v) {

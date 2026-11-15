@@ -26,13 +26,6 @@ test('t: sustitución, idioma desconocido y clave inexistente', () => {
   assert.equal(en('notify.start', { title: 'Gym' }), 'Starting: Gym');
   assert.equal(en('widget.until', {}), 'until {time}');   // variable no dada: se deja
   assert.equal(createT('fr').lang, 'es');
-  assert.equal(createT('fr')('tab.sched'), 'Horario');
+  assert.equal(createT('fr')('sched.title'), 'Horario');
   assert.equal(en('no.existe'), 'no.existe');
-});
-
-test('t.plural', () => {
-  const es = createT('es');
-  assert.equal(es.plural('todo.pending', 1), '1 pendiente');
-  assert.equal(es.plural('todo.pending', 3), '3 pendientes');
-  assert.equal(createT('en').plural('todo.pending', 2), '2 pending');
 });

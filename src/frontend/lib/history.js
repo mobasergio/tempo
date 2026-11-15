@@ -3,7 +3,7 @@
 // actual y devuelven el que hay que restaurar (o null si no hay).
 
 export function createHistory({ limit = 50 } = {}) {
-  let past = [];
+  const past = [];
   let future = [];
   const copy = (v) => structuredClone(v);
   return {
@@ -26,6 +26,5 @@ export function createHistory({ limit = 50 } = {}) {
     drop() { past.pop(); },
     canUndo: () => past.length > 0,
     canRedo: () => future.length > 0,
-    clear() { past = []; future = []; },
   };
 }

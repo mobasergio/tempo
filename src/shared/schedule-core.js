@@ -1,12 +1,14 @@
 // Lógica pura del horario semanal. Un bloque es
-// { id, title, start, end, days, color }: start/end en minutos desde las
-// 00:00 (end ≤ 1440), days con 0 = lunes. La usan el backend (avisos, bandeja,
+// { id, title, start, end, days, color, locked, notes }: start/end en minutos
+// desde las 00:00 (end ≤ 1440), days con 0 = lunes; locked impide moverlo,
+// cambiarle el horario o borrarlo hasta que se desbloquee. La usan el backend (avisos, bandeja,
 // widget) y la página (dibujo), así que no toca ni el DOM ni tjs.
 
 import { DAY_MIN } from './time.js';
 import { COLORS, DEFAULT_COLOR } from './colors.js';
 
 export const MAX_BLOCKS = 500;
+export const MAX_NOTES = 2000;
 
 /** Valida y normaliza una lista de bloques que viene de fuera (página o disco). */
 export function cleanBlocks(list) {
@@ -30,6 +32,8 @@ export function cleanBlocks(list) {
       title: typeof b.title === 'string' ? b.title.slice(0, 200) : '',
       start, end, days,
       color: typeof b.color === 'string' && b.color in COLORS ? b.color : DEFAULT_COLOR,
+      locked: b.locked === true,
+      notes: typeof b.notes === 'string' ? b.notes.slice(0, MAX_NOTES) : '',
     });
   }
   return out;
@@ -74,6 +78,19 @@ export function blocksStartingIn(blocks, day, fromMin, toMin) {
 }
 
 /**
+ * ¿El bloque `prev` (en curso en `prevDay`) acaba de terminar por su hora en
+ * `now`, sin pasar de `graceMin`? Distingue un final de verdad de un bloque
+ * borrado (ya no está) o de volver de una suspensión larga (fuera de margen).
+ * Un bloque que acaba a medianoche termina en el minuto 0 del día siguiente.
+ */
+export function endedNaturally(blocks, prev, prevDay, now, graceMin) {
+  const b = blocks.find((x) => x.id === prev.id);
+  if (!b || b.end !== prev.end || !b.days.includes(prevDay)) return false;
+  if (now.day === prevDay) return now.min >= b.end && now.min - b.end <= graceMin;
+  return b.end === DAY_MIN && now.day === (prevDay + 1) % 7 && now.min <= graceMin;
+}
+
+/**
  * Reparte en carriles los bloques de un día que se solapan.
  * Devuelve [{ b, lane, lanes }] ordenado por inicio.
  */
@@ -101,11 +118,4 @@ export function layoutDay(blocks, day) {
   }
   if (cluster.length) flush();
   return out;
-}
-
-/** Segundos que quedan del bloque en curso (o su duración si no está en curso). */
-export function timerSecondsFor(b, now) {
-  return isActiveAt(b, now)
-    ? b.end * 60 - (now.min * 60 + (now.sec || 0))
-    : (b.end - b.start) * 60;
 }

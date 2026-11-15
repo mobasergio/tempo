@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { hhmm, parseHHMM, fmtClock, durText, weekNow } from '../src/shared/time.js';
+import { hhmm, parseHHMM, fmtClock, durText, weekNow, rangeText, whenText } from '../src/shared/time.js';
+import { createT } from '../src/shared/i18n.js';
 
 test('hhmm', () => {
   assert.equal(hhmm(0), '00:00');
@@ -36,4 +37,12 @@ test('weekNow: lunes = 0, domingo = 6', () => {
   assert.equal(weekNow(new Date(2026, 10, 9, 8, 15, 30)).day, 0);   // lunes 9-11-2026
   const sun = weekNow(new Date(2026, 10, 15, 23, 59, 1));
   assert.deepEqual([sun.day, sun.min, sun.sec, sun.date], [6, 1439, 1, '2026-11-15']);
+});
+
+test('rangeText y whenText', () => {
+  assert.equal(rangeText(9 * 60, 10 * 60 + 30), '09:00 – 10:30');
+  const t = createT('es');
+  assert.equal(whenText(t, { inDays: 0, day: 0, start: 540 }), '09:00');
+  assert.equal(whenText(t, { inDays: 1, day: 1, start: 540 }), 'mañana 09:00');
+  assert.equal(whenText(t, { inDays: 3, day: 3, start: 540 }), 'jueves 09:00');
 });

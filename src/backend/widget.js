@@ -2,40 +2,28 @@
 // ventana aparte y visible, así que su página no se congela al ocultar la
 // principal.
 
+import { primaryVisible, openFloating } from './screen.js';
+
 const WIDGET_W = 300;
 const WIDGET_H = 92;
 
-export function createWidget({ app, title, t, info, onChange }) {
+export function createWidget({ app, title, t, info, parent, onChange }) {
   const w = { on: true, open: false, pos: null, lastSaved: '' };
 
   const state = () => ({ on: w.on, ...info() });
 
   async function defaultPosition() {
-    try {
-      const screens = await app.screens();
-      const s = screens.find((x) => x.primary) || screens[0];
-      const v = (s && s.visible) || s;
-      if (v) return { x: v.x + v.width - WIDGET_W - 16, y: v.y + v.height - WIDGET_H - 16 };
-    } catch {}
-    return { x: 40, y: 40 };
+    const v = await primaryVisible(app);
+    return v ? { x: v.x + v.width - WIDGET_W - 16, y: v.y + v.height - WIDGET_H - 16 } : { x: 40, y: 40 };
   }
 
   async function open() {
     if (w.open) return;
     w.open = true;
     const { x, y } = w.pos || await defaultPosition();
-    app.win.open('widget', {
-      page: 'widget.html',
-      title: t('widget.windowTitle', { app: title }),
-      size: `${WIDGET_W}x${WIDGET_H}`,
-      minSize: `${WIDGET_W}x${WIDGET_H}`,
-      x, y,
-      chrome: { frame: false, windowControls: false, acceptsFirstMouse: true },
+    openFloating(app, 'widget', {
+      page: 'widget.html', title: t('widget.windowTitle', { app: title }), w: WIDGET_W, h: WIDGET_H, x, y, parent,
     });
-    const win = app.window('widget');
-    win.setResizable(false);
-    win.setAlwaysOnTop(true);
-    win.show({ activate: false });
   }
 
   function close() {

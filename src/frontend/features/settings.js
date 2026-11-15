@@ -1,4 +1,4 @@
-// Ajustes (modal): general, apariencia y plugins. Los valores viven en el
+// Ajustes (modal): general y apariencia. Los valores viven en el
 // backend; aquí solo se muestran y se piden los cambios.
 
 import { $ } from '../lib/util.js';
@@ -58,11 +58,8 @@ export function initSettings(ctx, initial) {
     },
     onClose: () => stopRecording(),
   });
-  const open = dlg.open;
-  const close = dlg.close;
-
-  $('settingsBtn').addEventListener('click', open);
-  $('settingsClose').addEventListener('click', close);
+  $('settingsBtn').addEventListener('click', dlg.open);
+  $('settingsClose').addEventListener('click', dlg.close);
 
   // ── Pintar ──
 
@@ -74,12 +71,13 @@ export function initSettings(ctx, initial) {
     paintSeg('setTheme', s.theme);
     paintSeg('setLang', s.lang);
     $('setSound').checked = s.notifySound;
+    $('setPopup').checked = s.notifyPopup;
     $('setWidget').checked = widgetOn;
 
     const unsupported = launch === 'unsupported';
     $('setLaunch').checked = launch === 'enabled' || launch === 'requires-approval';
     $('setLaunch').disabled = unsupported;
-    $('setLaunch').closest('.plugin-row').classList.toggle('disabled', unsupported);
+    $('setLaunch').closest('.setting-row').classList.toggle('disabled', unsupported);
     $('launchHint').textContent = t(unsupported ? 'settings.launchUnsupported'
       : launch === 'requires-approval' ? 'settings.launchApproval' : 'settings.launchHint');
 
@@ -90,9 +88,6 @@ export function initSettings(ctx, initial) {
     $('clearHotkey').hidden = !s.hotkey || recording;
     $('hotkeyHint').textContent = hotkeyErr || t('settings.hotkeyHint');
     $('hotkeyHint').classList.toggle('err', !!hotkeyErr);
-
-    const { plugins } = ctx.state.get();
-    for (const box of document.querySelectorAll('.toggle[data-plugin]')) box.checked = !!plugins[box.dataset.plugin];
   }
 
   async function update(patch) {
@@ -119,6 +114,7 @@ export function initSettings(ctx, initial) {
     b.addEventListener('click', () => update({ lang: b.dataset.value }));
   }
   $('setSound').addEventListener('change', (e) => update({ notifySound: e.target.checked }));
+  $('setPopup').addEventListener('change', (e) => update({ notifyPopup: e.target.checked }));
 
   $('setWidget').addEventListener('change', async (e) => {
     try {
@@ -135,18 +131,6 @@ export function initSettings(ctx, initial) {
     try { launch = await tiny.api.call('setLaunchAtLogin', { on: e.target.checked }); } catch {}
     paint();
   });
-
-  for (const box of document.querySelectorAll('.toggle[data-plugin]')) {
-    box.addEventListener('change', async () => {
-      try {
-        ctx.applyPlugins(await tiny.api.call('setPlugins', { [box.dataset.plugin]: box.checked }));
-      } catch (e) {
-        box.checked = !box.checked;
-        console.error('setPlugins', e);
-      }
-    });
-  }
-  ctx.state.subscribe((st, prev) => { if (st.plugins !== prev.plugins && !scrim.hidden) paint(); });
 
   // ── Atajo global: clic y pulsar la combinación ──
 
@@ -187,5 +171,4 @@ export function initSettings(ctx, initial) {
   });
 
   applyTheme(s.theme);
-  return { open, close, isOpen: dlg.isOpen };
 }

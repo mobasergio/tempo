@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Tempo — Aviso</title>
+<script>
+  (function () {
+    var d = document.documentElement;
+    try { d.dataset.theme = localStorage.getItem('tempo.theme') || 'dark'; } catch (e) { d.dataset.theme = 'dark'; }
+  })();
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="alert-page">
+<div class="alert-box" id="alertBox" data-tiny-drag role="alertdialog" aria-labelledby="aTitle" aria-describedby="aTime">
+  <div class="a-kind" id="aKind"></div>
+  <h1 class="a-title" id="aTitle"></h1>
+  <div class="a-time" id="aTime"></div>
+  <p class="a-notes" id="aNotes" hidden></p>
+  <div class="a-next" id="aNext" hidden></div>
+  <div class="a-actions" data-tiny-nodrag>
+    <button type="button" class="btn link" id="aOpen" data-i18n="alert.open">Abrir horario</button>
+    <button type="button" class="btn primary" id="aOk" data-i18n="alert.ok">Vale</button>
+  </div>
+</div>
+<script type="module" src="alert.js"></script>
+</body>
+</html>

@@ -4,9 +4,9 @@ import { DEFAULT_SETTINGS, cleanSettings, cleanHotkey, resolveLang, effectiveLan
 
 test('cleanSettings: defaults y valores inválidos', () => {
   assert.deepEqual(cleanSettings(null), DEFAULT_SETTINGS);
-  assert.deepEqual(cleanSettings({ theme: 'neon', lang: 'fr', sysLang: 'de', notifySound: 'yes', extra: 1 }), DEFAULT_SETTINGS);
-  const s = cleanSettings({ theme: 'light', lang: 'en', sysLang: 'en', notifySound: false, hotkey: 'Alt+Ctrl+T' });
-  assert.deepEqual(s, { theme: 'light', lang: 'en', sysLang: 'en', notifySound: false, hotkey: 'ctrl+alt+t' });
+  assert.deepEqual(cleanSettings({ theme: 'neon', lang: 'fr', sysLang: 'de', notifySound: 'yes', notifyPopup: 1, extra: 1 }), DEFAULT_SETTINGS);
+  const s = cleanSettings({ theme: 'light', lang: 'en', sysLang: 'en', notifySound: false, notifyPopup: false, hotkey: 'Alt+Ctrl+T' });
+  assert.deepEqual(s, { theme: 'light', lang: 'en', sysLang: 'en', notifySound: false, notifyPopup: false, hotkey: 'ctrl+alt+t' });
 });
 
 test('cleanHotkey', () => {

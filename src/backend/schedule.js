@@ -1,17 +1,18 @@
-// Horario en el backend: guarda los bloques, avisa al empezar cada uno y
-// sabe cuál está en curso, para poder hacerlo con la ventana oculta.
+// Horario en el backend: guarda los bloques, avisa al empezar y al terminar
+// cada uno y sabe cuál está en curso, para poder hacerlo con la ventana oculta.
 
-import { hhmm, weekNow } from '../shared/time.js';
-import { cleanBlocks, currentBlock, nextBlock, blocksStartingIn } from '../shared/schedule-core.js';
+import { rangeText, weekNow } from '../shared/time.js';
+import { cleanBlocks, currentBlock, nextBlock, blocksStartingIn, endedNaturally } from '../shared/schedule-core.js';
 
 // Un aviso se da aunque el tick llegue hasta 2 min tarde (PC cargado, el
 // intervalo se retrasa); más allá (p. ej. al despertar de la suspensión) ya
 // no tiene sentido avisar de que "empieza" algo.
 const NOTIFY_GRACE_MIN = 2;
 
-export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChange, onStart }) {
+export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChange, onStart, onSwitch }) {
   let blocks = [];
   let nowBlock = null;
+  let nowDay = -1;              // día en que nowBlock estaba en curso
   const notified = new Set();   // `${id}@${fecha}` ya avisados hoy
   let notifiedDate = '';
   let lastMin = null;           // minuto del último repaso de avisos (hoy)
@@ -35,7 +36,7 @@ export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChang
       const key = `${b.id}@${n.date}`;
       if (notified.has(key)) continue;
       notified.add(key);
-      app.notify(t('notify.start', { title: b.title || t('app.untitled') }), `${hhmm(b.start)} – ${hhmm(b.end)}`,
+      app.notify(t('notify.start', { title: b.title || t('app.untitled') }), rangeText(b.start, b.end),
         { sound: getSettings().notifySound });
       started.push(b);
     }
@@ -44,8 +45,16 @@ export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChang
     const nx = nextBlock(blocks, n);
     const nsig = nx ? `${sig(nx)}|${nx.start}|${nx.inDays}` : '';
     const changed = sig(cur) !== sig(nowBlock);
+    // Cambio de tarea sin un inicio nuevo: el bloque en curso ha terminado y
+    // queda otro solapado (se vuelve a él) o ninguno.
+    let switched = null;
+    if (changed && !started.length && nowBlock && (!cur || cur.id !== nowBlock.id)
+        && endedNaturally(blocks, nowBlock, nowDay, n, NOTIFY_GRACE_MIN)) {
+      switched = { ended: nowBlock, now: cur };
+    }
     if (changed) {
       nowBlock = cur;
+      nowDay = n.day;
       app.push('now-block', nowBlock);
       onNowChange();
     }
@@ -55,6 +64,7 @@ export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChang
     }
     // el destello va después del estado nuevo, para que se vea con su color
     for (const b of started) onStart(b);
+    if (switched) onSwitch(switched);
   }
 
   return {
@@ -65,7 +75,9 @@ export function createSchedule({ app, t, getSettings, onNowChange, onWidgetChang
 
     async load() {
       blocks = cleanBlocks(await app.store.get('blocks'));
-      nowBlock = currentBlock(blocks, weekNow());
+      const n = weekNow();
+      nowBlock = currentBlock(blocks, n);
+      nowDay = n.day;
     },
 
     async save(list) {

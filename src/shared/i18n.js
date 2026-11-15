@@ -14,8 +14,6 @@ export function createT(lang) {
     if (!vars || typeof s !== 'string') return s;
     return s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
   };
-  /** Plural sencillo (es/en): clave.one si n === 1, si no clave.other. */
-  t.plural = (key, n, vars = {}) => t(`${key}.${n === 1 ? 'one' : 'other'}`, { n, ...vars });
   t.lang = DICTS[lang] ? lang : 'es';
   return t;
 }
